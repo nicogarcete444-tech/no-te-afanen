@@ -1,0 +1,36 @@
+{
+  "name": "no-te-afanen",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "@supabase/ssr": "^0.5.2",
+    "@supabase/supabase-js": "^2.45.4",
+    "html5-qrcode": "^2.3.8",
+    "next": "^16.3.5",
+    "tesseract.js": "^5.1.1",
+    "web-push": "^3.6.7",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.9",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@types/web-push": "^3.6.4",
+    "typescript": "^5.5.3"
+  },
+  "browserslist": [
+    "chrome >= 96",
+    "edge >= 96",
+    "firefox >= 96",
+    "safari >= 15",
+    "ios_saf >= 15",
+    "not dead"
+  ]
+}
