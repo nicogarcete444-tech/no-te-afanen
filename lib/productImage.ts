@@ -18,7 +18,7 @@ const cache = new Map<string, string | null>();
 const pending = new Map<string, { resolve: (v: string | null) => void }[]>();
 // Nombre "de mejor esfuerzo" para cada EAN en cola: el server lo usa SOLO
 // como respaldo, para validar una foto de MercadoLibre cuando ninguna de
-// las 3 bases de producto tiene nada (ver /api/imagenes). Si dos tarjetas
+// las bases abiertas ni las tiendas tienen nada (ver /api/imagenes). Si dos tarjetas
 // piden el mismo EAN con nombres distintos, se queda el primero — no afecta
 // la validación de forma relevante.
 const pendingNames = new Map<string, string>();
@@ -61,11 +61,15 @@ async function flush() {
   eans.forEach((ean) => pendingNames.delete(ean));
 
   let imagenes: Record<string, string | null> = {};
+  // EAN para los que alguna fuente falló y no se pudo confirmar "sin foto":
+  // no se cachean en la sesión, así se reintentan la próxima vez.
+  let pendientes = new Set<string>();
   try {
     const res = await fetch(`/api/imagenes?eans=${eans.join(',')}&names=${names}`);
     if (res.ok) {
       const data = await res.json();
       imagenes = data?.imagenes || {};
+      pendientes = new Set<string>(Array.isArray(data?.pendientes) ? data.pendientes : []);
     }
   } catch {
     // Sin red o error del server: resolvemos todo como "sin foto" y que se
@@ -76,7 +80,7 @@ async function flush() {
   waiters.forEach((list, ean) => {
     const url = Object.prototype.hasOwnProperty.call(imagenes, ean) ? imagenes[ean] : null;
     // Solo cacheamos si el server llegó a contestar algo sobre este código.
-    if (Object.prototype.hasOwnProperty.call(imagenes, ean)) cache.set(ean, url);
+    if (Object.prototype.hasOwnProperty.call(imagenes, ean) && !pendientes.has(ean)) cache.set(ean, url);
     list.forEach((w) => w.resolve(url));
   });
 }
@@ -108,6 +112,12 @@ export async function getProductImageUrl(
 // Algunos productos del carrito viejo se guardaron sin EAN en el id. Para
 // esos, le preguntamos a nuestro proxy de Precios Claros por el nombre y
 // usamos el id del primer resultado.
+// /api/productos exige lat/lng (desde que se endureció la validación) y este
+// pedido no mandaba ninguno: siempre daba 400 y los productos del carrito
+// viejo sin EAN se quedaban sin foto. Punto fijo en Buenos Aires: acá solo
+// se usa para ubicar el producto por nombre, no para precios.
+const BA_LAT = -34.6037;
+const BA_LNG = -58.3816;
 const nameToEanCache = new Map<string, string | null>();
 const nameInFlight = new Map<string, Promise<string | null>>();
 
@@ -117,7 +127,7 @@ async function getEanByName(name: string): Promise<string | null> {
 
   const promise = (async () => {
     try {
-      const res = await fetch(`/api/productos?q=${encodeURIComponent(name)}&limit=1`);
+      const res = await fetch(`/api/productos?q=${encodeURIComponent(name)}&lat=${BA_LAT}&lng=${BA_LNG}&limit=1&smart=1`);
       if (!res.ok) throw new Error('HTTP ' + res.status);
       const data = await res.json();
       const first = (data?.productos || [])[0];

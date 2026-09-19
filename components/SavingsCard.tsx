@@ -4,9 +4,10 @@ import { fmt } from '@/lib/products';
 //
 // El fondo es public/hero-cart.webp (un carrito 3D violeta sobre violeta
 // liso). Todo el espacio vacío está a la izquierda, así que el texto se
-// apoya ahí y el carrito queda a la derecha sin que se pisen. La imagen y
-// el velo de contraste viven en CSS (ver .savings-card en globals.css); acá
-// solo está el contenido.
+// apoya ahí y el carrito queda a la derecha sin que se pisen. Formato
+// apaisado y bajo, con bordes redondeados (sin el picado de ticket). La
+// imagen y el velo de contraste viven en CSS (ver .savings-card en
+// globals.css); acá solo está el contenido.
 //
 // Tiene dos estados, porque no son la misma pantalla:
 //   - Sin ahorro todavía (recién instalada): versión más baja. Un "$ 0"
@@ -30,8 +31,8 @@ export default function SavingsCard({
         <div className="savings-amount">{fmt(savings)}</div>
         <div className="savings-detail">
           {savings > 0
-            ? 'Sumado de cada lista de compras que confirmaste este mes.'
-            : 'Armá tu carrito, compará y confirmá la lista: el ahorro se suma acá.'}
+            ? 'De tus listas confirmadas este mes.'
+            : 'Armá tu carrito y confirmá la lista: el ahorro se suma acá.'}
         </div>
       </div>
 

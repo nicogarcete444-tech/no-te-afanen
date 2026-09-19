@@ -56,7 +56,7 @@ function buildCsp(nonce: string): string {
     // El riesgo de un estilo inyectado es muchísimo menor que el de un
     // script: no ejecuta código.
     "style-src 'self' 'unsafe-inline'",
-    "img-src 'self' data: blob: https://*.openfoodfacts.org https://*.openbeautyfacts.org https://*.openproductsfacts.org https://*.mlstatic.com",
+    "img-src 'self' data: blob: https://*.openfoodfacts.org https://*.openbeautyfacts.org https://*.openproductsfacts.org https://*.openpetfoodfacts.org https://*.vtexassets.com https://*.vteximg.com.br https://*.mlstatic.com",
     "connect-src 'self' https://*.supabase.co https://world.openfoodfacts.org https://world.openbeautyfacts.org https://world.openproductsfacts.org",
     "font-src 'self' data:",
     "frame-src 'none'",

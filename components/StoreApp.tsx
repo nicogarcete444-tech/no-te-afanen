@@ -417,12 +417,19 @@ export default function StoreApp({
           if (!cancelled) {
             // vamos mostrando lo que ya llegó, en vez de tapar todo hasta el final
             setCatalogItems((prev) => (isFirstPage ? [...merged] : [...prev, ...results.flat()]));
-            setCatalogLoading(false);
+            // Solo se baja el "cargando" cuando ya hay algo para mostrar.
+            // Antes se bajaba al terminar la PRIMERA tanda de búsquedas, aunque
+            // viniera vacía: la pantalla mostraba "No encontramos productos"
+            // mientras las demás tandas seguían en camino, y parecía un bug.
+            if (merged.length) setCatalogLoading(false);
           }
         }
       }
       if (cancelled) return;
       setLoadingMore(false);
+      // Terminaron TODAS las tandas: recién ahora, si no vino nada, vale
+      // mostrar el estado vacío.
+      if (!isHome) setCatalogLoading(false);
 
       let finalItems = merged;
       if (isHome) {
@@ -508,7 +515,7 @@ export default function StoreApp({
       setLiveStatus('Consultando precios oficiales...');
       try {
         const res = await fetch(
-          `/api/productos?q=${encodeURIComponent(searchTerm.trim())}&lat=${coords.lat}&lng=${coords.lng}`
+          `/api/productos?q=${encodeURIComponent(searchTerm.trim())}&lat=${coords.lat}&lng=${coords.lng}&smart=1`
         );
         if (!res.ok) throw new Error('HTTP ' + res.status);
         const data = await res.json();
@@ -516,7 +523,11 @@ export default function StoreApp({
         setLiveItems(items);
         setLiveStatus(
           items.length
-            ? 'Datos en vivo — Precios Claros (Secretaría de Comercio)'
+            ? data.aproximada
+              ? 'No hay una coincidencia exacta — te mostramos los más parecidos. Datos de Precios Claros.'
+              : data.relacionados
+              ? `Mostrando "${searchTerm.trim()}" y productos relacionados. Datos de Precios Claros.`
+              : 'Datos en vivo — Precios Claros (Secretaría de Comercio)'
             : scannedEan
             ? 'No encontramos ese producto escaneado en Precios Claros. Probá buscarlo escribiendo el nombre.'
             : `Sin resultados en Precios Claros para "${searchTerm.trim()}".`
@@ -988,7 +999,7 @@ export default function StoreApp({
           <div className="list-header-right">
             <SortMenu value={sortOrder} onChange={setSortOrder} />
             <div className="list-count">
-              {liveMode ? '' : `${filteredCatalog.length} producto${filteredCatalog.length === 1 ? '' : 's'}`}
+              {liveMode || catalogLoading ? '' : `${filteredCatalog.length} producto${filteredCatalog.length === 1 ? '' : 's'}`}
             </div>
           </div>
         </div>
@@ -1022,14 +1033,21 @@ export default function StoreApp({
                 <div>Sin resultados para &quot;{searchTerm}&quot; en Precios Claros.</div>
               </div>
             )
-          ) : catalogLoading ? (
-            <ListSkeleton rows={5} />
+          ) : catalogLoading || (loadingMore && filteredCatalog.length === 0) ? (
+            <div className="loading-state" role="status" aria-live="polite">
+              <div className="spinner" aria-hidden="true" />
+              <div>Cargando productos…</div>
+            </div>
           ) : filteredCatalog.length === 0 ? (
             <div className="empty-state">
               <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
                 <circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" />
               </svg>
-              <div>No encontramos productos para &quot;{searchTerm}&quot;.</div>
+              <div>
+                {searchTerm
+                  ? <>No encontramos productos para &quot;{searchTerm}&quot;.</>
+                  : 'No pudimos cargar productos de este rubro ahora. Probá de nuevo en un momento.'}
+              </div>
             </div>
           ) : (
             <CategoryProductList

@@ -14,6 +14,7 @@ import { fetchWithTimeout } from '@/lib/fetchWithTimeout';
 const OFF_DOMAINS = [
   'world.openfoodfacts.org',
   'world.openbeautyfacts.org',
+  'world.openpetfoodfacts.org',
   'world.openproductsfacts.org',
 ];
 
