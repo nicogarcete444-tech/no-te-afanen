@@ -44,15 +44,12 @@ type CookieToSet = { name: string; value: string; options: CookieOptions };
 //
 // A propósito NO se usa 'strict-dynamic': con strict-dynamic el navegador
 // ignora la lista de dominios y confía en lo que carguen los scripts ya
-// confiados. Eso rompería "Buscar por foto", que baja el worker, el
-// WebAssembly y los datos de idioma de tesseract.js desde jsdelivr por
-// caminos que no heredan esa confianza (worker creado desde un blob:).
-// Manteniendo la lista explícita, el nonce saca 'unsafe-inline' sin tocar
-// nada de lo que ya funcionaba.
+// confiados. Manteniendo la lista explícita, el nonce saca 'unsafe-inline'
+// sin tocar nada de lo que ya funcionaba.
 function buildCsp(nonce: string): string {
   return [
     "default-src 'self'",
-    `script-src 'self' 'nonce-${nonce}' 'wasm-unsafe-eval' https://cdn.jsdelivr.net`,
+    `script-src 'self' 'nonce-${nonce}' 'wasm-unsafe-eval'`,
     "worker-src 'self' blob:",
     // style-src sí conserva 'unsafe-inline': React escribe estilos inline
     // (style={{...}}) por todos lados y Next inyecta su CSS crítico igual.
@@ -60,7 +57,7 @@ function buildCsp(nonce: string): string {
     // script: no ejecuta código.
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: blob: https://*.openfoodfacts.org https://*.openbeautyfacts.org https://*.openproductsfacts.org https://*.mlstatic.com",
-    "connect-src 'self' https://*.supabase.co https://world.openfoodfacts.org https://world.openbeautyfacts.org https://world.openproductsfacts.org https://cdn.jsdelivr.net",
+    "connect-src 'self' https://*.supabase.co https://world.openfoodfacts.org https://world.openbeautyfacts.org https://world.openproductsfacts.org",
     "font-src 'self' data:",
     "frame-src 'none'",
     "object-src 'none'",

@@ -36,16 +36,15 @@ import NearbyDealsFeed from './NearbyDealsFeed';
 import Footer from './Footer';
 import BottomNav, { BottomNavTab } from './BottomNav';
 
-// Estos cinco quedan siempre montados en el árbol (controlados por su prop
+// Estos cuatro quedan siempre montados en el árbol (controlados por su prop
 // `open`, no por un if), así que con un import normal su JS entraba entero
-// en el bundle inicial aunque el usuario nunca abra el carrito, el escáner,
-// la búsqueda por foto o los modales de historial/premium. dynamic() los
+// en el bundle inicial aunque el usuario nunca abra el carrito, el escáner
+// o los modales de historial/premium. dynamic() los
 // separa en su propio chunk, que recién se pide la primera vez que se
 // renderizan — es la mayor parte de los ~115 KiB de "JavaScript que no se
 // usa" que marcaba Lighthouse en la carga inicial.
 const CartSheet = dynamic(() => import('./CartSheet'));
 const BarcodeScanner = dynamic(() => import('./BarcodeScanner'));
-const PhotoSearch = dynamic(() => import('./PhotoSearch'));
 const SavingsHistoryModal = dynamic(() => import('./SavingsHistoryModal'));
 const PremiumModal = dynamic(() => import('./PremiumModal'));
 
@@ -232,10 +231,6 @@ export default function StoreApp({
   // exacto en vez de mostrar cualquier coincidencia parcial por nombre.
   const [scannerOpen, setScannerOpen] = useState(false);
   const [scannedEan, setScannedEan] = useState<string | null>(null);
-
-  // Búsqueda por foto: se resuelve del lado del cliente (OCR sobre la foto,
-  // ver lib/ocr.ts), acá solo se guarda si el modal está abierto.
-  const [photoSearchOpen, setPhotoSearchOpen] = useState(false);
 
   // Orden de los resultados por precio (catálogo y búsqueda en vivo).
   const [sortOrder, setSortOrder] = useState<SortOrder>('relevancia');
@@ -593,15 +588,6 @@ export default function StoreApp({
     // a tandas) reiniciaba la cámara en el medio del escaneo.
   }, [coords]);
 
-  // El texto que adivinó el OCR (lib/photoSearchText.ts) ya lo confirmó/editó
-  // la persona en el modal, así que acá se trata igual que si lo hubiera
-  // tipeado a mano: no queda "pegado" a ningún EAN puntual.
-  function handlePhotoSearch(term: string) {
-    setPhotoSearchOpen(false);
-    setScannedEan(null);
-    setSearchTerm(term);
-  }
-
   function popBadge() {
     setCartPop(false);
     if (cartPopTimeout.current) clearTimeout(cartPopTimeout.current);
@@ -785,7 +771,7 @@ export default function StoreApp({
   // del carrito y se movía la página de atrás, y al cerrar habías perdido el
   // lugar donde estabas.
   const anySheetOpen =
-    cartOpen || savingsHistoryOpen || premiumModalOpen || scannerOpen || photoSearchOpen;
+    cartOpen || savingsHistoryOpen || premiumModalOpen || scannerOpen;
   useEffect(() => {
     if (!anySheetOpen) return;
     const previous = document.body.style.overflow;
@@ -808,13 +794,12 @@ export default function StoreApp({
   }, [anySheetOpen]);
 
   // Cerrar TODO lo que esté abierto (hojas y modales). Antes Escape cerraba
-  // solo tres de los cinco: la búsqueda por foto y el modal de Premium se
-  // quedaban abiertos y encima dejaban el fondo sin poder scrollear.
+  // solo algunos: el modal de Premium se quedaba abierto y encima dejaba el
+  // fondo sin poder scrollear.
   function closeAllSheets() {
     setCartOpen(false);
     setSavingsHistoryOpen(false);
     setScannerOpen(false);
-    setPhotoSearchOpen(false);
     setPremiumModalOpen(false);
   }
 
@@ -948,7 +933,6 @@ export default function StoreApp({
           onToggleTheme={toggleTheme}
           searchValue={searchTerm}
           onSearchChange={handleSearchChange}
-          onPhotoSearch={() => setPhotoSearchOpen(true)}
           onScan={() => setScannerOpen(true)}
           scrolled={scrolled}
           userId={userId}
@@ -1114,12 +1098,6 @@ export default function StoreApp({
         open={scannerOpen}
         onClose={() => setScannerOpen(false)}
         onDetected={handleBarcodeDetected}
-      />
-
-      <PhotoSearch
-        open={photoSearchOpen}
-        onClose={() => setPhotoSearchOpen(false)}
-        onSearch={handlePhotoSearch}
       />
 
       <SavingsHistoryModal

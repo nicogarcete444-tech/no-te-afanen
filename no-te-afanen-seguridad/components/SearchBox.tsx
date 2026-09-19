@@ -6,16 +6,13 @@ import { getRelatedSearches } from '@/lib/relatedSearches';
 export default function SearchBox({
   value,
   onChange,
-  onPhotoSearch,
   onScan,
 }: {
   value: string;
   onChange: (v: string) => void;
-  onPhotoSearch?: () => void;
-  // Escanear un código de barras dejó de ser un botón grande aparte debajo
-  // del buscador y pasó a vivir acá adentro, al lado de la búsqueda por
-  // foto: son las dos formas de "buscar sin escribir", tienen que estar
-  // juntas y en el mismo lugar donde la persona ya está mirando.
+  // Escanear un código de barras vive acá adentro, en el mismo lugar donde
+  // la persona ya está mirando, y no como un botón grande aparte debajo del
+  // buscador.
   onScan?: () => void;
 }) {
   const [focused, setFocused] = useState(false);
@@ -58,6 +55,8 @@ export default function SearchBox({
           // campo como una búsqueda. autoCorrect/spellCheck apagados porque
           // los nombres de producto y de marca no están en el diccionario y
           // el corrector los rompía mientras se tipeaba.
+          // (la X nativa de type="search" está oculta en globals.css: ya
+          // tenemos nuestro propio botón de limpiar, y se veían dos)
           type="search"
           inputMode="search"
           enterKeyHint="search"
@@ -65,7 +64,7 @@ export default function SearchBox({
           autoCorrect="off"
           autoCapitalize="none"
           spellCheck={false}
-          placeholder="Buscar producto, marca o categoría..."
+          placeholder="Buscar producto o marca"
           value={value}
           onChange={(e) => onChange(e.target.value)}
           onFocus={() => setFocused(true)}
@@ -100,20 +99,6 @@ export default function SearchBox({
             <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
               <path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2" />
               <path d="M7 8v8M10.5 8v8M13 8v8M16 8v3M16 15v1M19 8v8" />
-            </svg>
-          </button>
-        )}
-        {onPhotoSearch && !value && (
-          <button
-            type="button"
-            className="scan-btn"
-            aria-label="Buscar por foto"
-            title="Buscar por foto"
-            onClick={onPhotoSearch}
-          >
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M4 8a2 2 0 0 1 2-2h1.2l1-1.6A2 2 0 0 1 10 3.5h4a2 2 0 0 1 1.8.9L17 6h1a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8z" />
-              <circle cx="12" cy="12.5" r="3.4" />
             </svg>
           </button>
         )}

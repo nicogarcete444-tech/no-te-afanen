@@ -30,7 +30,6 @@ export default function Header({
   onDismissAccountHint,
   searchValue,
   onSearchChange,
-  onPhotoSearch,
   onScan,
 }: {
   theme: 'light' | 'dark';
@@ -57,7 +56,6 @@ export default function Header({
   // cambiar de búsqueda.
   searchValue: string;
   onSearchChange: (v: string) => void;
-  onPhotoSearch: () => void;
   onScan: () => void;
 }) {
   const [accountOpen, setAccountOpen] = useState(false);
@@ -481,7 +479,6 @@ export default function Header({
         <SearchBox
           value={searchValue}
           onChange={onSearchChange}
-          onPhotoSearch={onPhotoSearch}
           onScan={onScan}
         />
       </div>

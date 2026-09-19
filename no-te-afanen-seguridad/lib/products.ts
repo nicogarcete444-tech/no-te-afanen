@@ -2966,6 +2966,93 @@ export const DEFAULT_CATALOG_QUERIES: { category: string; query: string }[] = [
   { category: 'Lácteos', query: 'yogur bebible con avena' },
   { category: 'Lácteos', query: 'queso crema con hierbas organico' },
   { category: 'Lácteos', query: 'manteca sin lactosa' },
+  // Frescos — ampliación (pedido del dueño): más cortes de parrilla, fiambres y
+  // embutidos, pescados, pastas frescas y otros refrigerados. Igual que todo lo
+  // de arriba, son búsquedas reales contra Precios Claros.
+  { category: 'Frescos', query: 'asado con hueso' },
+  { category: 'Frescos', query: 'asado de novillito' },
+  { category: 'Frescos', query: 'asado de ternera' },
+  { category: 'Frescos', query: 'asado para parrilla' },
+  { category: 'Frescos', query: 'parrillada' },
+  { category: 'Frescos', query: 'achuras surtidas' },
+  { category: 'Frescos', query: 'tripa gorda' },
+  { category: 'Frescos', query: 'mondongo' },
+  { category: 'Frescos', query: 'criadillas' },
+  { category: 'Frescos', query: 'lomo' },
+  { category: 'Frescos', query: 'bife de lomo' },
+  { category: 'Frescos', query: 'entrecot' },
+  { category: 'Frescos', query: 'chuleta de ternera' },
+  { category: 'Frescos', query: 'bife de costilla' },
+  { category: 'Frescos', query: 'chuletón' },
+  { category: 'Frescos', query: 'punta de espalda' },
+  { category: 'Frescos', query: 'palomita' },
+  { category: 'Frescos', query: 'tortuguita' },
+  { category: 'Frescos', query: 'aguja' },
+  { category: 'Frescos', query: 'brazuelo' },
+  { category: 'Frescos', query: 'lomo de cerdo' },
+  { category: 'Frescos', query: 'solomillo de cerdo' },
+  { category: 'Frescos', query: 'paleta de cerdo' },
+  { category: 'Frescos', query: 'chuleta de cerdo' },
+  { category: 'Frescos', query: 'costilla de cerdo' },
+  { category: 'Frescos', query: 'pata de cerdo' },
+  { category: 'Frescos', query: 'ribs de cerdo' },
+  { category: 'Frescos', query: 'asado de cerdo' },
+  { category: 'Frescos', query: 'carne picada de cerdo' },
+  { category: 'Frescos', query: 'carne picada mixta' },
+  { category: 'Frescos', query: 'albondigas' },
+  { category: 'Frescos', query: 'albondigas de carne' },
+  { category: 'Frescos', query: 'hamburguesas caseras' },
+  { category: 'Frescos', query: 'pinchos de carne' },
+  { category: 'Frescos', query: 'pinchos de pollo' },
+  { category: 'Frescos', query: 'brochettes' },
+  { category: 'Frescos', query: 'bondiolitas' },
+  { category: 'Frescos', query: 'pollo para asar' },
+  { category: 'Frescos', query: 'pollo fresco' },
+  { category: 'Frescos', query: 'pollo a la parrilla' },
+  { category: 'Frescos', query: 'salame tandilero' },
+  { category: 'Frescos', query: 'salame de colonia caroya' },
+  { category: 'Frescos', query: 'salame en rodajas' },
+  { category: 'Frescos', query: 'salame en fetas' },
+  { category: 'Frescos', query: 'salame de cerdo' },
+  { category: 'Frescos', query: 'salame sin gluten' },
+  { category: 'Frescos', query: 'salame tipo milan feteado' },
+  { category: 'Frescos', query: 'salamin en rodajas' },
+  { category: 'Frescos', query: 'jamon cocido en fetas' },
+  { category: 'Frescos', query: 'paleta ahumada' },
+  { category: 'Frescos', query: 'bondiola cocida' },
+  { category: 'Frescos', query: 'leberwurst' },
+  { category: 'Frescos', query: 'salchicha de frankfurt' },
+  { category: 'Frescos', query: 'mortadela en fetas' },
+  { category: 'Frescos', query: 'fiambre en fetas' },
+  { category: 'Frescos', query: 'fiambre para sandwiches' },
+  { category: 'Frescos', query: 'longaniza de salta' },
+  { category: 'Frescos', query: 'chorizo seco' },
+  { category: 'Frescos', query: 'pescado fresco' },
+  { category: 'Frescos', query: 'filet de salmon' },
+  { category: 'Frescos', query: 'sardinas frescas' },
+  { category: 'Frescos', query: 'filet de pescado' },
+  { category: 'Frescos', query: 'trucha ahumada' },
+  { category: 'Frescos', query: 'salmon ahumado' },
+  { category: 'Frescos', query: 'pasta fresca' },
+  { category: 'Frescos', query: 'ravioles de verdura' },
+  { category: 'Frescos', query: 'ravioles de ricota' },
+  { category: 'Frescos', query: 'sorrentinos de jamon y queso' },
+  { category: 'Frescos', query: 'ñoquis de papa' },
+  { category: 'Frescos', query: 'capeletis' },
+  { category: 'Frescos', query: 'tallarines frescos' },
+  { category: 'Frescos', query: 'fideos al huevo frescos' },
+  { category: 'Frescos', query: 'lasagna fresca' },
+  { category: 'Frescos', query: 'tapas de empanadas' },
+  { category: 'Frescos', query: 'masa de pizza' },
+  { category: 'Frescos', query: 'masa de hojaldre' },
+  { category: 'Frescos', query: 'salsa fresca' },
+  { category: 'Frescos', query: 'pesto fresco' },
+  { category: 'Frescos', query: 'tofu' },
+  { category: 'Frescos', query: 'hummus' },
+  { category: 'Frescos', query: 'ensalada lista' },
+  { category: 'Frescos', query: 'milanesa de berenjena' },
+  { category: 'Frescos', query: 'provoleta para parrilla' },
+  { category: 'Frescos', query: 'queso para provoleta' },
 ];
 
 // Cuántos resultados le pedimos a Precios Claros por cada búsqueda de la
@@ -2987,14 +3074,51 @@ export const CATALOG_RESULTS_PER_QUERY = 8;
 // como sugerencias del buscador (lib/relatedSearches.ts).
 export const CATALOG_QUERIES_PER_PAGE = 12;
 
+// Búsquedas "fijas" de la primera tanda de un rubro.
+//
+// Frescos tiene cientos de búsquedas (quesos, cortes, fiambres, pescados) y la
+// rotación diaria de abajo hacía que abrir el rubro mostrara hoy una tanda
+// de quesos, mañana una de cortes de cerdo… y que lo primero que uno espera
+// encontrar (el asado, el salame, el chorizo) apareciera recién después de
+// varios "Ver más". Estas son las que tienen que verse SIEMPRE al abrir el
+// rubro; el resto sigue rotando por día desde la segunda tanda.
+export const CATALOG_PINNED: Record<string, string[]> = {
+  Frescos: [
+    'asado',
+    'tira de asado',
+    'vacio',
+    'matambre',
+    'chorizo',
+    'morcilla',
+    'salame',
+    'salamin',
+    'bondiola',
+    'jamon cocido',
+    'carne picada',
+    'pollo',
+  ],
+};
+
 // Devuelve la tanda `page` (0-indexada) de búsquedas de un rubro.
 //
 // El punto de arranque rota por día para que la vidriera no muestre siempre
 // exactamente los mismos 96 productos: hoy empieza en una parte de la lista,
 // mañana en otra. Es determinístico dentro del mismo día, así que el caché
 // del servidor (revalidate) sigue sirviendo y no se multiplica el trabajo.
+//
+// Si el rubro tiene búsquedas fijas (CATALOG_PINNED), la tanda 0 son esas y
+// la rotación arranca desde la tanda 1, sobre el resto.
 export function catalogQueriesFor(category: string, page = 0): { category: string; query: string }[] {
-  const all = DEFAULT_CATALOG_QUERIES.filter((q) => q.category === category);
+  const pinned = CATALOG_PINNED[category]?.slice(0, CATALOG_QUERIES_PER_PAGE);
+  let all = DEFAULT_CATALOG_QUERIES.filter((q) => q.category === category);
+
+  if (pinned?.length) {
+    if (page === 0) return pinned.map((query) => ({ category, query }));
+    const fijas = new Set(pinned);
+    all = all.filter((q) => !fijas.has(q.query));
+    page -= 1;
+  }
+
   if (all.length <= CATALOG_QUERIES_PER_PAGE) return all;
 
   const dayIndex = Math.floor(Date.now() / 86_400_000);
@@ -3009,8 +3133,10 @@ export function catalogQueriesFor(category: string, page = 0): { category: strin
 
 // Cuántas tandas tiene un rubro (para saber cuándo esconder "Ver más").
 export function catalogPagesFor(category: string): number {
-  const total = DEFAULT_CATALOG_QUERIES.filter((q) => q.category === category).length;
-  return Math.max(1, Math.ceil(total / CATALOG_QUERIES_PER_PAGE));
+  const pinned = CATALOG_PINNED[category]?.slice(0, CATALOG_QUERIES_PER_PAGE);
+  const fijas = new Set(pinned ?? []);
+  const total = DEFAULT_CATALOG_QUERIES.filter((q) => q.category === category && !fijas.has(q.query)).length;
+  return Math.max(1, Math.ceil(total / CATALOG_QUERIES_PER_PAGE) + (pinned?.length ? 1 : 0));
 }
 
 // En la portada pedimos varios resultados por búsqueda (no 1 solo, ni los 8

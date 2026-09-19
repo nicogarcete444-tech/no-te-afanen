@@ -77,21 +77,7 @@ export default function PrivacidadPage() {
           identificar el producto (ver sección 4).
         </p>
 
-        <SubTitle>2.4. Búsqueda por foto</SubTitle>
-        <p>
-          Si usás &quot;Buscar por foto&quot;, tu navegador te va a pedir permiso para
-          usar la cámara o elegir una imagen. Esa foto <strong>no se sube a nuestro
-          servidor ni se le manda a Precios Claros</strong>: se procesa enteramente en tu
-          propio dispositivo (lectura de texto/OCR) para adivinar el nombre del producto.
-          Vos revisás y podés editar ese texto antes de buscar; recién ese texto final se
-          envía como una búsqueda normal (ver 2.3). La primera vez que usás esta función,
-          tu navegador descarga un archivo genérico de lectura de texto (no una foto ni un
-          dato tuyo) desde una red de distribución de contenido de terceros (jsdelivr, que
-          usa la librería tesseract.js — ver sección 5); ese archivo se guarda en caché
-          para no volver a bajarlo cada vez.
-        </p>
-
-        <SubTitle>2.5. Si te suscribís a Premium</SubTitle>
+        <SubTitle>2.4. Si te suscribís a Premium</SubTitle>
         <p>
           El alta de Premium se coordina por WhatsApp. Cuando tocás &quot;Quiero
           Premium&quot;, se abre un chat con un mensaje ya escrito que incluye el email
@@ -106,7 +92,7 @@ export default function PrivacidadPage() {
           está activa y hasta qué fecha.
         </p>
 
-        <SubTitle>2.6. Lo que no recopilamos</SubTitle>
+        <SubTitle>2.5. Lo que no recopilamos</SubTitle>
         <p>
           Hoy la app no usa cookies de publicidad ni de análisis de terceros (por ejemplo,
           Google Analytics o Meta Pixel), no guarda tu ubicación exacta de forma
@@ -170,12 +156,6 @@ export default function PrivacidadPage() {
           <li>
             <strong>Vercel</strong> (o el hosting donde corra la app): procesa las
             solicitudes técnicas para que la app funcione.
-          </li>
-          <li>
-            <strong>jsdelivr (CDN de tesseract.js)</strong>: si usás &quot;Buscar por
-            foto&quot;, tu navegador descarga desde ahí el motor de lectura de texto. No
-            le llega tu foto ni ningún dato personal — solo se pide un archivo genérico,
-            igual para cualquier usuario de esa librería en cualquier sitio.
           </li>
           <li>
             <strong>WhatsApp (Meta)</strong>: si nos escribís para darte de alta o de
