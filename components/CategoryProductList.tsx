@@ -15,7 +15,7 @@ import {
   sortGroups,
 } from '@/lib/liveItems';
 import { computeUnitPrice } from '@/lib/unitPrice';
-import { FREE_ALERT_LIMIT, getWatchedCount, getWatchedEans, toggleWatch } from '@/lib/priceAlerts';
+import { fetchStorePriceDetails } from '@/lib/storePrices';
 import ProductDetailSheet, { ProductDetailInfo } from './ProductDetailSheet';
 
 const FALLBACK_ICON_PATH =
@@ -67,24 +67,49 @@ function CatRowMedia({ ean, nombre }: { ean: string | null; nombre: string }) {
   );
 }
 
-function FollowButton({
-  watching,
+// Agregar al carrito desde la fila, sin abrir la ficha.
+//
+// Hasta acá el único camino para sumar un producto era: tocar la fila,
+// esperar a que la ficha cargara los precios de las 4 cadenas, tocar
+// "Agregar", volver. Para armar una lista de 15 productos eso son 45 toques
+// y 15 esperas. Ahora la ficha queda para cuando querés ver el desglose por
+// súper, y armar el carrito es un toque por producto.
+//
+// En este botón vivía antes la campanita de "seguir este producto". Se fue
+// a la ficha (donde ya estaba, duplicada): seguir un precio es algo que se
+// hace con un producto puntual que te importa, no algo que necesites a mano
+// en cada una de las cincuenta filas de un rubro.
+function AddButton({
+  inCart,
+  busy,
   onToggle,
 }: {
-  watching: boolean;
-  onToggle: (e: { stopPropagation: () => void }) => void;
+  inCart: boolean;
+  busy: boolean;
+  onToggle: (e: React.MouseEvent) => void;
 }) {
   return (
     <button
-      className={`cat-row-follow${watching ? ' active' : ''}`}
+      type="button"
+      className={`cat-row-add${inCart ? ' in-cart' : ''}${busy ? ' busy' : ''}`}
+      aria-label={inCart ? 'Quitar del carrito' : 'Agregar al carrito'}
+      aria-pressed={inCart}
+      disabled={busy}
       onClick={onToggle}
-      title={watching ? 'Dejar de seguir este precio' : 'Seguir este precio (avisamos si sube o baja)'}
-      aria-label={watching ? 'Dejar de seguir' : 'Seguir'}
     >
-      <svg width="16" height="16" viewBox="0 0 24 24" fill={watching ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M18 8a6 6 0 0 0-12 0c0 4.5-1.5 6-2 7h16c-.5-1-2-2.5-2-7Z" />
-        <path d="M10 20a2 2 0 0 0 4 0" />
-      </svg>
+      {busy ? (
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round">
+          <path d="M12 3a9 9 0 1 0 9 9" />
+        </svg>
+      ) : inCart ? (
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M20 6 9 17l-5-5" />
+        </svg>
+      ) : (
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M12 5v14M5 12h14" />
+        </svg>
+      )}
     </button>
   );
 }
@@ -98,9 +123,8 @@ function CatRow({
   last,
   isSelected,
   onClick,
-  showFollow,
-  watching,
-  onToggleFollow,
+  adding,
+  onToggleCart,
 }: {
   marca?: string;
   nombre: string;
@@ -110,9 +134,8 @@ function CatRow({
   last: boolean;
   isSelected: boolean;
   onClick: () => void;
-  showFollow: boolean;
-  watching: boolean;
-  onToggleFollow: () => void;
+  adding: boolean;
+  onToggleCart: () => void;
 }) {
   const metaParts = [presentacion, ean ? `Cód. ${ean}` : null].filter(Boolean);
   // "Desde" el precio más bajo a nivel país (ver comentario abajo): el
@@ -145,15 +168,16 @@ function CatRow({
         <span className="cat-row-price-val">{precio ? fmt(precio) : 's/d'}</span>
         {unitPrice && <span className="cat-row-price-unit">{unitPrice.label}</span>}
       </div>
-      {showFollow && ean && (
-        <FollowButton
-          watching={watching}
-          onToggle={(e) => {
-            e.stopPropagation();
-            onToggleFollow();
-          }}
-        />
-      )}
+      <AddButton
+        inCart={isSelected}
+        busy={adding}
+        onToggle={(e) => {
+          // stopPropagation: si no, el mismo toque abre además la ficha del
+          // producto encima del carrito recién modificado.
+          e.stopPropagation();
+          onToggleCart();
+        }}
+      />
     </div>
   );
 }
@@ -176,50 +200,49 @@ export default function CategoryProductList({
   sortOrder?: SortOrder;
 }) {
   const [openProduct, setOpenProduct] = useState<ProductDetailInfo | null>(null);
-  const [watchedEans, setWatchedEans] = useState<Set<string>>(new Set());
-  const [alertLimitNotice, setAlertLimitNotice] = useState<string | null>(null);
+  // Qué fila está pidiendo precios ahora mismo (el "+" gira mientras tanto).
+  const [addingId, setAddingId] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!userId) {
-      setWatchedEans(new Set());
+  // Agregar desde la fila: primero traemos el precio real por cadena (el
+  // mismo fetchStorePriceDetails que usa la ficha, con su caché de 30
+  // minutos, así que si ya abriste ese producto no hay espera), y recién
+  // con esos números lo metemos al carrito. Sin esto, el producto entraría
+  // sin precios y la comparación por súper lo dejaría afuera.
+  //
+  // Sacarlo del carrito no pide nada a la red: es inmediato.
+  async function handleQuickToggle(
+    id: string,
+    displayName: string,
+    category: string,
+    ean: string | null
+  ) {
+    if (addingId) return;
+
+    if (selected[id]) {
+      onToggle(id, { name: displayName, category, prices: {}, ean, icon: '' });
       return;
     }
-    let cancelled = false;
-    getWatchedEans(userId).then((eans) => {
-      if (!cancelled) setWatchedEans(eans);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [userId]);
 
-  useEffect(() => {
-    if (!alertLimitNotice) return;
-    const t = setTimeout(() => setAlertLimitNotice(null), 4000);
-    return () => clearTimeout(t);
-  }, [alertLimitNotice]);
-
-  async function handleToggleFollow(ean: string, nombre: string) {
-    if (!userId) return;
-    const currentlyWatching = watchedEans.has(ean);
-    // El tope de free solo frena PRENDER un seguimiento nuevo; apagar uno
-    // nunca está limitado (mismo criterio que en la ficha del producto).
-    if (!currentlyWatching && !premium) {
-      const current = await getWatchedCount(userId);
-      if (current >= FREE_ALERT_LIMIT) {
-        setAlertLimitNotice(
-          `Llegaste al tope de ${FREE_ALERT_LIMIT} seguimientos del plan free. Sacá alguno o pasate a premium para seguir sin límite.`
-        );
-        return;
+    setAddingId(id);
+    try {
+      const details = ean && stores.length ? await fetchStorePriceDetails(ean, stores) : null;
+      const priceByStore: Record<string, number> = {};
+      if (details) {
+        Object.entries(details).forEach(([chain, detail]) => {
+          if (detail?.precio) priceByStore[chain] = detail.precio;
+        });
       }
+      onToggle(id, {
+        name: displayName,
+        category,
+        prices: priceByStore,
+        ean,
+        pricedAt: Date.now(),
+        icon: '',
+      });
+    } finally {
+      setAddingId(null);
     }
-    const next = await toggleWatch(userId, ean, nombre, currentlyWatching);
-    setWatchedEans((prev) => {
-      const copy = new Set(prev);
-      if (next) copy.add(ean);
-      else copy.delete(ean);
-      return copy;
-    });
   }
 
   const groupedAll = groupLiveItems(items);
@@ -251,7 +274,6 @@ export default function CategoryProductList({
 
   return (
     <>
-      {alertLimitNotice && <div className="cat-alert-limit-notice">{alertLimitNotice}</div>}
       {orderedCats.map((cat) => {
         const group = sortGroups(byCat.get(cat)!, sortOrder);
         const dotColor = (CATEGORY_COLORS[cat] || ['#B9C0BB', '#8B948A'])[1];
@@ -280,9 +302,8 @@ export default function CategoryProductList({
                     onClick={() =>
                       setOpenProduct({ id, displayName, category: cat, ean, presentacion: item.presentacion })
                     }
-                    showFollow={!!userId}
-                    watching={!!ean && watchedEans.has(ean)}
-                    onToggleFollow={() => ean && handleToggleFollow(ean, displayName)}
+                    adding={addingId === id}
+                    onToggleCart={() => handleQuickToggle(id, displayName, cat, ean)}
                   />
                 );
               })}

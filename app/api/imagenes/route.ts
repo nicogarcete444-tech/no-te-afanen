@@ -1,5 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getClientIp, isRateLimited, RATE_LIMITS } from '@/lib/apiSecurity';
+import { fetchWithTimeout } from '@/lib/fetchWithTimeout';
+
+// Con hasta MAX_EANS productos por pedido y (antes) hasta 4 llamadas
+// secuenciales por producto, esta ruta podía tardar bastante; le damos
+// margen para el escenario con más productos y timeouts en juego.
+export const maxDuration = 25;
 
 // Resuelve, EN LOTE y del lado del servidor, la foto de varios productos a
 // partir de su código de barras.
@@ -92,9 +98,10 @@ async function resolveFromMercadoLibre(ean: string, name: string | undefined): P
   // equivocada.
   if (!name) return null;
   try {
-    const res = await fetch(
+    const res = await fetchWithTimeout(
       `https://api.mercadolibre.com/sites/MLA/search?q=${encodeURIComponent(ean)}&limit=5`,
-      { headers: ML_HEADERS, next: { revalidate: CACHE_SECONDS } }
+      { headers: ML_HEADERS, next: { revalidate: CACHE_SECONDS } },
+      4000
     );
     if (!res.ok) return null;
     const data = await res.json();
@@ -110,42 +117,57 @@ async function resolveFromMercadoLibre(ean: string, name: string | undefined): P
   }
 }
 
-async function resolveOne(ean: string, name: string | undefined): Promise<string | null> {
-  for (const domain of OFF_DOMAINS) {
-    try {
-      const res = await fetch(
-        // Los productos se muestran a lo sumo a 104px (el "hero" del detalle;
-        // en la lista son 54px). image_front_url es la foto ORIGINAL que
-        // sube cada usuario a Open Food Facts — puede pesar cientos de KB o
-        // varios MB — y antes era la primera opción, así que se bajaba una
-        // foto de varios megapíxeles para mostrar un cuadradito chico. Acá
-        // pedimos también las versiones ya redimensionadas por OFF
-        // (_small_, ~200px, y _thumb_, ~100px) y las preferimos: cubren
-        // hasta pantallas @2x sin bajar la original salvo que no exista otra.
-        `https://${domain}/api/v2/product/${ean}.json?fields=image_front_small_url,image_small_url,image_front_thumb_url,image_thumb_url,image_front_url,image_url`,
-        { headers: OFF_HEADERS, next: { revalidate: CACHE_SECONDS } }
-      );
-      if (!res.ok) continue;
-      const data = await res.json();
-      if (data?.status !== 1) continue;
-      // Orden de preferencia: primero las versiones ya redimensionadas por
-      // OFF (frente chica ~200px, luego genérica chica, luego frente mini
-      // ~100px, luego genérica mini). Recién si el producto no tiene
-      // ninguna versión chica caemos a la foto de frente original y, como
-      // último recurso, a la genérica original — de ahí para abajo puede
-      // pesar varios MB, así que solo se usa cuando no queda otra.
-      const url: string | undefined =
-        data?.product?.image_front_small_url ||
-        data?.product?.image_small_url ||
-        data?.product?.image_front_thumb_url ||
-        data?.product?.image_thumb_url ||
-        data?.product?.image_front_url ||
-        data?.product?.image_url;
-      if (url) return url;
-    } catch {
-      // esa base falló: probamos con la siguiente
-    }
+async function lookupPhotoInDomain(domain: string, ean: string): Promise<string | null> {
+  try {
+    const res = await fetchWithTimeout(
+      // Los productos se muestran a lo sumo a 104px (el "hero" del detalle;
+      // en la lista son 54px). image_front_url es la foto ORIGINAL que
+      // sube cada usuario a Open Food Facts — puede pesar cientos de KB o
+      // varios MB — y antes era la primera opción, así que se bajaba una
+      // foto de varios megapíxeles para mostrar un cuadradito chico. Acá
+      // pedimos también las versiones ya redimensionadas por OFF
+      // (_small_, ~200px, y _thumb_, ~100px) y las preferimos: cubren
+      // hasta pantallas @2x sin bajar la original salvo que no exista otra.
+      `https://${domain}/api/v2/product/${ean}.json?fields=image_front_small_url,image_small_url,image_front_thumb_url,image_thumb_url,image_front_url,image_url`,
+      { headers: OFF_HEADERS, next: { revalidate: CACHE_SECONDS } },
+      4000
+    );
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (data?.status !== 1) return null;
+    // Orden de preferencia: primero las versiones ya redimensionadas por
+    // OFF (frente chica ~200px, luego genérica chica, luego frente mini
+    // ~100px, luego genérica mini). Recién si el producto no tiene
+    // ninguna versión chica caemos a la foto de frente original y, como
+    // último recurso, a la genérica original — de ahí para abajo puede
+    // pesar varios MB, así que solo se usa cuando no queda otra.
+    return (
+      data?.product?.image_front_small_url ||
+      data?.product?.image_small_url ||
+      data?.product?.image_front_thumb_url ||
+      data?.product?.image_thumb_url ||
+      data?.product?.image_front_url ||
+      data?.product?.image_url ||
+      null
+    );
+  } catch {
+    // esa base falló o tardó más de 4s: la tratamos como "no la tiene"
+    return null;
   }
+}
+
+async function resolveOne(ean: string, name: string | undefined): Promise<string | null> {
+  // Antes se probaban las 3 bases UNA POR UNA, esperando la respuesta
+  // completa de cada una antes de pasar a la siguiente — hasta 3 idas y
+  // vueltas en serie POR PRODUCTO, y con hasta 60 productos por pedido
+  // (todos corriendo en paralelo entre sí) alcanzaba con que una sola base
+  // anduviera lenta para atrasar el pedido entero. Como cada dominio cubre
+  // un rubro distinto (alimentos / cosmética / el resto de los productos),
+  // no hay problema en consultarlas las 3 EN PARALELO: el tiempo pasa a ser
+  // el de la más lenta de las tres, no la suma.
+  const results = await Promise.all(OFF_DOMAINS.map((domain) => lookupPhotoInDomain(domain, ean)));
+  const found = results.find((url) => !!url);
+  if (found) return found;
   // Ninguna de las 3 bases tenía nada: probamos MercadoLibre como último
   // recurso, validando el título antes de confiar en la foto.
   return resolveFromMercadoLibre(ean, name);

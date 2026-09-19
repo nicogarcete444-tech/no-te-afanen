@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { getClientIp, isRateLimited } from '@/lib/apiSecurity';
 
 export async function POST(request: NextRequest) {
+  if (isRateLimited('push-unsub:' + getClientIp(request), 20)) {
+    return NextResponse.json({ error: 'Demasiados pedidos. Esperá un momento.' }, { status: 429 });
+  }
+
   let body: any;
   try {
     body = await request.json();
@@ -10,7 +15,7 @@ export async function POST(request: NextRequest) {
   }
 
   const endpoint = typeof body?.endpoint === 'string' ? body.endpoint : null;
-  if (!endpoint) {
+  if (!endpoint || endpoint.length > 1000) {
     return NextResponse.json({ error: 'Falta el endpoint.' }, { status: 400 });
   }
 
@@ -32,7 +37,8 @@ export async function POST(request: NextRequest) {
     .eq('user_id', user.id);
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.error('[push/unsubscribe]', error.message);
+    return NextResponse.json({ error: 'No se pudo borrar la suscripción.' }, { status: 500 });
   }
   return NextResponse.json({ unsubscribed: true });
 }

@@ -5,6 +5,19 @@ export interface PasswordChecks {
   symbol: boolean; // al menos 1 símbolo
 }
 
+// ¿Cumple TODOS los requisitos? Es la función que decide si un registro
+// puede seguir. Existe porque hasta acá la checklist que se ve al registrarse
+// era puramente decorativa: mostraba cuatro tildes en gris y el formulario
+// dejaba crear la cuenta igual con "12345678" (el único freno real era el
+// minLength=8 del input, que ni siquiera cubre el caso de pegar la
+// contraseña). Mostrarle a alguien una lista de requisitos y después no
+// exigirlos es peor que no mostrarla: da una sensación de seguridad que no
+// existe.
+export function meetsPasswordPolicy(password: string): boolean {
+  const checks = getPasswordChecks(password);
+  return checks.length && checks.mixedCase && checks.number && checks.symbol;
+}
+
 export function getPasswordChecks(password: string): PasswordChecks {
   return {
     length: password.length >= 8,

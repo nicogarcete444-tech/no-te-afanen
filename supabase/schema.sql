@@ -82,20 +82,28 @@ create index if not exists tracked_products_last_snapshot_idx
 
 alter table public.tracked_products enable row level security;
 
--- Cualquiera puede sumar/actualizar un producto a la lista de seguimiento
--- (no hay nada privado acá, es solo "esto se buscó"), pero nadie puede
--- borrar filas ni leer más de lo que necesita el propio cliente.
+-- Leer no tiene nada de privado ("esto se buscó"), así que sigue abierto a
+-- cualquiera. Escribir es otra historia: como la anon key es pública por
+-- diseño (viaja en el bundle del navegador), una policy de insert/update
+-- "with check (true)" no es una regla de negocio blanda, es una puerta
+-- abierta — cualquiera puede pegarle directo a la API REST de Supabase con
+-- esa key, sin pasar por /api/track-product ni por su rate limit, e inflar
+-- la tabla sin límite (y de paso la cola de trabajo del cron de
+-- snapshot-prices, que recorre esta tabla entera).
+--
+-- Antes había policies "insert_all"/"update_all" para que el cliente
+-- (con la anon key) pudiera escribir directo. Se sacaron: ahora la única
+-- escritura la hace el propio servidor con la service_role key (que
+-- ignora RLS por completo) desde app/api/track-product/route.ts, detrás
+-- del rate limit de esa ruta. Sin policy de insert/update para el rol
+-- "authenticated" ni "anon", cualquier intento de escribir con la anon key
+-- lo corta Postgres mismo, network-level, antes de que le llegue a nadie.
 drop policy if exists "tracked_products_select_all" on public.tracked_products;
 create policy "tracked_products_select_all" on public.tracked_products
   for select using (true);
 
 drop policy if exists "tracked_products_insert_all" on public.tracked_products;
-create policy "tracked_products_insert_all" on public.tracked_products
-  for insert with check (true);
-
 drop policy if exists "tracked_products_update_all" on public.tracked_products;
-create policy "tracked_products_update_all" on public.tracked_products
-  for update using (true);
 
 create table if not exists public.price_snapshots (
   id bigint generated always as identity primary key,

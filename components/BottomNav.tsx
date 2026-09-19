@@ -1,10 +1,59 @@
-export type BottomNavTab = 'inicio' | 'buscar' | 'carrito' | 'compras' | 'perfil' | 'escanear';
+'use client';
+
+import { useEffect, useState } from 'react';
+
+// 'buscar' ya no existe como pestaña: el buscador vive fijo en el header,
+// a la vista todo el tiempo, así que un botón que solo hacía scroll hasta
+// arriba y enfocaba el campo dejó de tener sentido.
+export type BottomNavTab = 'inicio' | 'carrito' | 'compras' | 'perfil' | 'escanear';
+
+// La barra es `position:fixed`, así que sin esto queda flotando siempre a
+// la misma altura — incluido encima del Footer, cuando la persona llega al
+// final de la página (ahí tapaba "Términos y condiciones", "Política de
+// privacidad", etc.). La escondemos apenas el final de la página (donde
+// vive el Footer) entra en pantalla, y la volvemos a mostrar en cuanto se
+// aleja de ahí, sea porque volvió a subir o porque la página cambió de
+// alto (nuevos productos cargados, etc.).
+function useHideNearPageEnd(thresholdPx = 140) {
+  const [hidden, setHidden] = useState(false);
+
+  useEffect(() => {
+    function update() {
+      const doc = document.documentElement;
+      const distanceToBottom = doc.scrollHeight - (window.scrollY + window.innerHeight);
+      setHidden(distanceToBottom < thresholdPx);
+    }
+
+    update();
+    window.addEventListener('scroll', update, { passive: true });
+    window.addEventListener('resize', update);
+
+    // El alto de la página cambia solo (se cargan más productos, se abre/
+    // cierra un acordeón, etc.) sin que haya scroll de por medio; con solo
+    // los listeners de arriba, la barra podía quedar escondida "de más" o
+    // tapando el footer hasta el próximo scroll. ResizeObserver detecta esos
+    // cambios de alto directamente.
+    const observer = new ResizeObserver(update);
+    observer.observe(document.body);
+
+    return () => {
+      window.removeEventListener('scroll', update);
+      window.removeEventListener('resize', update);
+      observer.disconnect();
+    };
+  }, [thresholdPx]);
+
+  return hidden;
+}
 
 const ITEMS: { id: BottomNavTab; label: string }[] = [
   { id: 'inicio', label: 'Inicio' },
   { id: 'compras', label: 'Mis compras' },
   { id: 'escanear', label: 'Escanear' },
-  { id: 'carrito', label: 'Comparar' },
+  // Decía "Comparar" con un ícono de carrito y el globito de cuántos
+  // productos llevás: el botón abre el carrito, comparar es lo que hacés
+  // adentro. El nombre ahora coincide con lo que pasa al tocarlo.
+  { id: 'carrito', label: 'Carrito' },
   { id: 'perfil', label: 'Perfil' },
 ];
 
@@ -27,13 +76,6 @@ function TabIcon({ id, active, forceColor }: { id: BottomNavTab; active: boolean
         <svg {...common}>
           <path d="M4 11.5 12 4l8 7.5" />
           <path d="M6 10v9a1 1 0 0 0 1 1h3v-6h4v6h3a1 1 0 0 0 1-1v-9" />
-        </svg>
-      );
-    case 'buscar':
-      return (
-        <svg {...common}>
-          <circle cx="11" cy="11" r="7" />
-          <path d="M21 21l-4.3-4.3" />
         </svg>
       );
     case 'carrito':
@@ -87,8 +129,10 @@ export default function BottomNav({
   cartPop: boolean;
   onSelect: (tab: BottomNavTab) => void;
 }) {
+  const hidden = useHideNearPageEnd();
+
   return (
-    <nav className="bottom-nav">
+    <nav className={`bottom-nav${hidden ? ' bottom-nav-hidden' : ''}`}>
       {ITEMS.map((item) => {
         const isActive = active === item.id;
         const isRaised = item.id === 'escanear';

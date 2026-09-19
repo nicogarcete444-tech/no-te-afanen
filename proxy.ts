@@ -19,8 +19,72 @@ type CookieToSet = { name: string; value: string; options: CookieOptions };
 // MIDDLEWARE_INVOCATION_FAILED en todas las páginas). Por eso todo el
 // chequeo de sesión va en un try/catch y, ante cualquier problema, dejamos
 // pasar la request como invitado en vez de romper todo.
+// ---------------------------------------------------------------------
+// Content-Security-Policy con nonce por request
+// ---------------------------------------------------------------------
+//
+// Antes la CSP vivía entera en next.config.mjs y su script-src incluía
+// 'unsafe-inline'. Eso deja la CSP casi sin efecto contra XSS, que es
+// justamente el ataque del que la CSP tiene que defender: con
+// 'unsafe-inline', CUALQUIER <script>...</script> que un atacante logre
+// inyectar en el HTML se ejecuta igual. La CSP seguía sirviendo para
+// limitar de dónde se cargan imágenes y a qué dominios se puede conectar,
+// pero la parte que importa estaba abierta.
+//
+// Se puso ahí por un motivo real: Next inyecta scripts inline propios (los
+// datos de hidratación) y la app tiene el script de arranque del tema. La
+// forma correcta de permitir ESOS y solo esos es un nonce: un número al
+// azar distinto en cada request, que se le pone a los scripts legítimos y
+// que el atacante no puede adivinar. Por eso la CSP se arma acá y no en
+// next.config: necesita generarse por request.
+//
+// Next lo propaga solo a sus propios scripts si encuentra el nonce en la
+// cabecera CSP de la REQUEST (de ahí que se setee en los dos lados), y
+// app/layout.tsx lo lee de x-nonce para el script del tema.
+//
+// A propósito NO se usa 'strict-dynamic': con strict-dynamic el navegador
+// ignora la lista de dominios y confía en lo que carguen los scripts ya
+// confiados. Eso rompería "Buscar por foto", que baja el worker, el
+// WebAssembly y los datos de idioma de tesseract.js desde jsdelivr por
+// caminos que no heredan esa confianza (worker creado desde un blob:).
+// Manteniendo la lista explícita, el nonce saca 'unsafe-inline' sin tocar
+// nada de lo que ya funcionaba.
+function buildCsp(nonce: string): string {
+  return [
+    "default-src 'self'",
+    `script-src 'self' 'nonce-${nonce}' 'wasm-unsafe-eval' https://cdn.jsdelivr.net`,
+    "worker-src 'self' blob:",
+    // style-src sí conserva 'unsafe-inline': React escribe estilos inline
+    // (style={{...}}) por todos lados y Next inyecta su CSS crítico igual.
+    // El riesgo de un estilo inyectado es muchísimo menor que el de un
+    // script: no ejecuta código.
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data: blob: https://*.openfoodfacts.org https://*.openbeautyfacts.org https://*.openproductsfacts.org https://*.mlstatic.com",
+    "connect-src 'self' https://*.supabase.co https://world.openfoodfacts.org https://world.openbeautyfacts.org https://world.openproductsfacts.org https://cdn.jsdelivr.net",
+    "font-src 'self' data:",
+    "frame-src 'none'",
+    "object-src 'none'",
+    "frame-ancestors 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    // Si algún recurso se colara por http://, que el navegador lo pida por
+    // https en vez de mostrar "contenido mixto" o cargarlo en claro.
+    'upgrade-insecure-requests',
+  ].join('; ');
+}
+
 export async function proxy(request: NextRequest) {
-  let response = NextResponse.next({ request });
+  // crypto.randomUUID() usa el generador criptográfico del runtime, no
+  // Math.random(): un nonce adivinable no sirve de nada.
+  const nonce = Buffer.from(crypto.randomUUID()).toString('base64');
+  const csp = buildCsp(nonce);
+
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set('x-nonce', nonce);
+  requestHeaders.set('Content-Security-Policy', csp);
+
+  let response = NextResponse.next({ request: { headers: requestHeaders } });
+  response.headers.set('Content-Security-Policy', csp);
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -37,7 +101,12 @@ export async function proxy(request: NextRequest) {
         },
         setAll(cookiesToSet: CookieToSet[]) {
           cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
-          response = NextResponse.next({ request });
+          // Al rearmar la respuesta para escribir las cookies se perdían las
+          // cabeceras ya puestas: hay que volver a pasar los headers de la
+          // request (con el nonce) y a setear la CSP, si no las páginas que
+          // refrescan sesión salían sin CSP y sus scripts sin nonce.
+          response = NextResponse.next({ request: { headers: requestHeaders } });
+          response.headers.set('Content-Security-Policy', csp);
           cookiesToSet.forEach(({ name, value, options }) =>
             response.cookies.set(name, value, options)
           );
@@ -55,7 +124,9 @@ export async function proxy(request: NextRequest) {
     if (user && isLoginRoute) {
       const url = request.nextUrl.clone();
       url.pathname = '/';
-      return NextResponse.redirect(url);
+      const redirect = NextResponse.redirect(url);
+      redirect.headers.set('Content-Security-Policy', csp);
+      return redirect;
     }
   } catch {
     // Cualquier falla de Supabase acá se ignora: el usuario sigue navegando

@@ -188,7 +188,6 @@ export default function CategoryChips({
               <CategoryIcon category={c} active={isActive} />
             </span>
             {c}
-            <span className="chip-underline" />
           </button>
         );
       })}

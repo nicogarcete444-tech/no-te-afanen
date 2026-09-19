@@ -137,6 +137,14 @@ async function getEanByName(name: string): Promise<string | null> {
   return promise;
 }
 
+// El nombre que usamos para buscarle foto a un producto (mismo criterio que
+// usa cada tarjeta): nombre, si no hay presentación, si no hay marca. Vive
+// acá para que la portada (pickHomeTeaserWithPhotos, en StoreApp) elija
+// entre varios candidatos con el mismo criterio que después va a mostrar.
+export function photoLookupName(item: { nombre?: string; presentacion?: string; marca?: string }): string {
+  return item.nombre?.trim() || item.presentacion?.trim() || item.marca || 'Producto';
+}
+
 export async function getProductImageUrlByName(name: string): Promise<string | null> {
   const ean = await getEanByName(name);
   return getProductImageUrl(ean, name);

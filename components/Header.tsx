@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { fmt } from '@/lib/products';
 import { getNotifications, markNotificationsRead, PriceDropNotification } from '@/lib/priceAlerts';
+import SearchBox from './SearchBox';
 import {
   getPushPermissionState,
   hasActivePushSubscription,
@@ -14,9 +15,6 @@ import {
 } from '@/lib/pushSubscription';
 
 export default function Header({
-  cartCount,
-  cartPop,
-  onCartClick,
   theme,
   onToggleTheme,
   scrolled,
@@ -30,10 +28,11 @@ export default function Header({
   openAccountSignal,
   showAccountHint,
   onDismissAccountHint,
+  searchValue,
+  onSearchChange,
+  onPhotoSearch,
+  onScan,
 }: {
-  cartCount: number;
-  cartPop: boolean;
-  onCartClick: () => void;
   theme: 'light' | 'dark';
   onToggleTheme: () => void;
   scrolled: boolean;
@@ -52,6 +51,14 @@ export default function Header({
   // sin plantar un cartel grande en medio de la página.
   showAccountHint?: boolean;
   onDismissAccountHint?: () => void;
+  // El buscador vive ahora adentro del header, que es sticky: buscar es lo
+  // que la gente entra a hacer, y antes se perdía apenas scrolleabas dos
+  // pantallas de catálogo — había que volver hasta arriba de todo para
+  // cambiar de búsqueda.
+  searchValue: string;
+  onSearchChange: (v: string) => void;
+  onPhotoSearch: () => void;
+  onScan: () => void;
 }) {
   const [accountOpen, setAccountOpen] = useState(false);
   const accountRef = useRef<HTMLDivElement>(null);
@@ -224,7 +231,7 @@ export default function Header({
             <div className="brand-sub">Comparador de precios</div>
           </div>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <div className="head-actions">
           {userId && (
             // Ya no hay campana en el header: las bajadas de precio se
             // abren desde el menú de cuenta (fila "Productos que sigo", al
@@ -287,15 +294,11 @@ export default function Header({
             </div>
           )}
 
-          <button className="theme-toggle" aria-label="Ver carrito" style={{ position: 'relative' }} onClick={onCartClick}>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M3 4h2l1.6 9.6a2 2 0 0 0 2 1.7h7.6a2 2 0 0 0 2-1.6L20 8H6.2" />
-              <circle cx="9.5" cy="19" r="1.3" />
-              <circle cx="16.5" cy="19" r="1.3" />
-            </svg>
-            {cartCount > 0 && <span className={`cart-badge${cartPop ? ' pop' : ''}`}>{cartCount}</span>}
-          </button>
-
+          {/* Acá había un segundo botón de carrito, con su propio globito de
+              cantidad, a 40px del que ya vive en la barra de abajo (que está
+              además donde llega el pulgar). Dos accesos idénticos a la misma
+              hoja no agregan nada y le sacaban aire al header, que ahora
+              tiene que hacerle lugar al buscador. */}
           <div className="account-menu" ref={accountRef}>
             <button
               className="theme-toggle"
@@ -472,6 +475,15 @@ export default function Header({
             )}
           </div>
         </div>
+      </div>
+
+      <div className="head-search">
+        <SearchBox
+          value={searchValue}
+          onChange={onSearchChange}
+          onPhotoSearch={onPhotoSearch}
+          onScan={onScan}
+        />
       </div>
     </header>
   );

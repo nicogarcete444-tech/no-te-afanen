@@ -41,9 +41,26 @@ self.addEventListener('push', (event) => {
 
 // Al tocar la notificación: si ya hay una pestaña abierta la enfoca, si no
 // abre una nueva en la URL del aviso.
+// Solo se abren rutas de NUESTRO propio origen. El destino viene dentro del
+// payload del push; hoy ese payload lo arma nuestro servidor, pero si
+// alguna vez se filtraran las claves VAPID, quien las tenga podría mandarle
+// un push a nuestros usuarios con la URL que quiera y este handler la
+// abriría sin preguntar — phishing perfecto, abierto desde la notificación
+// de una app en la que confían. Normalizando contra self.location.origin,
+// lo peor que puede pasar es que abra la home.
+function safeInternalUrl(raw) {
+  try {
+    const url = new URL(raw, self.location.origin);
+    if (url.origin !== self.location.origin) return '/';
+    return url.pathname + url.search;
+  } catch {
+    return '/';
+  }
+}
+
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  const targetUrl = event.notification.data?.url || '/';
+  const targetUrl = safeInternalUrl(event.notification.data?.url || '/');
 
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientsList) => {

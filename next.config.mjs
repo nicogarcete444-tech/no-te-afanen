@@ -15,38 +15,24 @@ const securityHeaders = [
   { key: 'Permissions-Policy', value: 'camera=(self), microphone=(), geolocation=(self), interest-cohort=()' },
   // Fuerza HTTPS en el navegador por 2 años, incluidos subdominios.
   { key: 'Strict-Transport-Security', value: 'max-age=63072000; includeSubDomains; preload' },
-  // Content-Security-Policy: solo permite cargar recursos desde donde la app
-  // realmente los necesita (nuestro propio dominio, Supabase y las bases de
-  // Open * Facts para las fotos de producto).
+  // Aislamiento del contexto de navegación. COOP corta la referencia
+  // window.opener entre nuestra pestaña y cualquier otra que la haya
+  // abierto (o que abramos), así que un sitio externo no puede tocar
+  // nuestro window ni navegarnos a otro lado. CORP evita que otro origen
+  // embeba nuestras respuestas como recurso.
+  { key: 'Cross-Origin-Opener-Policy', value: 'same-origin' },
+  { key: 'Cross-Origin-Resource-Policy', value: 'same-origin' },
+  // Sin prefetch de DNS: no filtramos a los resolvers qué dominios aparecen
+  // en la página antes de que el usuario haga nada.
+  { key: 'X-DNS-Prefetch-Control', value: 'off' },
+  // La CSP NO está acá: se arma por request en proxy.ts, porque lleva un
+  // nonce distinto cada vez. Ver el comentario largo en ese archivo.
   //
-  // Las tipografías (Archivo e Inter) ya NO se piden a fonts.googleapis.com /
-  // fonts.gstatic.com: app/layout.tsx las carga con next/font/google, que las
-  // descarga en build time y las sirve como archivo estático propio. Eso saca
-  // esa request bloqueante de la cadena crítica de renderizado y de paso deja
-  // que font-src/style-src queden más angostos, ya sin dominios externos.
-  //
-  // Lo que sigue en pie: las fotos de Perfumería y Limpieza. lib/productImage.ts
-  // consulta tres bases (openfoodfacts para alimentos, openbeautyfacts para
-  // cosmética y openproductsfacts para el resto), así que connect-src e
-  // img-src necesitan las tres o esos rubros se quedan sin imagen. Sumamos
-  // mlstatic.com (el CDN de imágenes de MercadoLibre): es el fallback que
-  // usa /api/imagenes cuando ninguna de esas tres bases tiene foto del
-  // producto — bastante habitual en marcas argentinas que esas bases
-  // globales no llegan a cubrir.
-  {
-    key: 'Content-Security-Policy',
-    value: [
-      "default-src 'self'",
-      "script-src 'self' 'unsafe-inline'",
-      "style-src 'self' 'unsafe-inline'",
-      "img-src 'self' data: blob: https://*.openfoodfacts.org https://*.openbeautyfacts.org https://*.openproductsfacts.org https://*.mlstatic.com",
-      "connect-src 'self' https://*.supabase.co https://world.openfoodfacts.org https://world.openbeautyfacts.org https://world.openproductsfacts.org",
-      "font-src 'self' data:",
-      "frame-ancestors 'none'",
-      "base-uri 'self'",
-      "form-action 'self'",
-    ].join('; '),
-  },
+  // Antes vivía en este archivo y su script-src tenía 'unsafe-inline', que
+  // es lo mismo que no tener defensa contra XSS: cualquier <script>
+  // inyectado en el HTML se ejecutaba igual. Si por algún motivo hay que
+  // volver atrás, el valor viejo está en el historial de git — pero
+  // conviene arreglar el nonce y no reponer 'unsafe-inline'.
 ];
 
 // Cache-Control largo + immutable para los estáticos de /public que no

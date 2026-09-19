@@ -143,19 +143,6 @@ export default function CompareSection({
   // los datos por súper estén incompletos.
   const savingAmount = potentialSavings(chosenEntries);
 
-  // Cuántos súpers tienen precio confirmado de TODO el carrito. Con varios
-  // productos esto da 0 bastante seguido (Precios Claros no informa todo en
-  // todas las cadenas), y antes eso dejaba la sección completamente vacía:
-  // la persona gastaba una de sus 3 comparaciones de la semana y no veía
-  // absolutamente nada abajo. Ahora, si no hay ningún total comparable, al
-  // menos le mostramos el desglose producto por producto, que es el dato que
-  // de verdad le sirve para ir a comprar.
-  const completeCount = complete.filter(Boolean).length;
-
-  // Producto por producto: dónde está más barato y cuánto.
-  const perProduct = bestPerProduct(chosenEntries);
-  const totalPorProducto = perProduct.reduce((sum, p) => sum + (p.precio ?? 0) * p.qty, 0);
-
   async function handleCopyList() {
     const text = buildShoppingListText(chosenEntries, stores, order, totals, complete);
     const ok = await copyText(text);
@@ -369,48 +356,6 @@ export default function CompareSection({
               </button>
             )}
           </div>
-
-          {completeCount === 0 && (
-            <div className="compare-partial">
-              <div className="compare-partial-title">
-                {storeTotals.length
-                  ? 'Ningún súper tiene informados todos tus productos'
-                  : 'Todavía no tenemos precios de estos productos'}
-              </div>
-              <div className="compare-partial-text">
-                {storeTotals.length
-                  ? <>Por eso los totales de arriba son estimados para los productos que le faltan a
-                    cada súper. Lo que sí es exacto: producto por producto, dónde está más barato de
-                    los que sí tienen precio.</>
-                  : <>No podemos armar una comparación todavía. Lo que sí sirve: producto por
-                    producto, dónde está más barato de los que sí tienen precio.</>}
-              </div>
-              <div className="compare-partial-list">
-                {perProduct.map((p) => (
-                  <div className="compare-partial-row" key={p.id}>
-                    <span className="compare-partial-name">
-                      {p.qty > 1 ? `${p.qty}× ` : ''}
-                      {p.name}
-                    </span>
-                    {p.precio === null ? (
-                      <span className="compare-partial-none">sin precio</span>
-                    ) : (
-                      <span className="compare-partial-price">
-                        {fmt(p.precio)}
-                        {p.store ? <span className="compare-partial-store"> · {p.store}</span> : null}
-                      </span>
-                    )}
-                  </div>
-                ))}
-              </div>
-              {totalPorProducto > 0 && (
-                <div className="cart-sheet-total" style={{ marginTop: 14, marginBottom: 0 }}>
-                  <span className="label">Total comprando cada cosa donde está más barata</span>
-                  <span className="val">{fmt(totalPorProducto)}</span>
-                </div>
-              )}
-            </div>
-          )}
 
           <div className="copy-list-block">
             <button className="cta-btn secondary" style={{ width: '100%' }} onClick={handleCopyList}>

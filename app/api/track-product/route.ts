@@ -1,16 +1,15 @@
-import { createClient as createSupabaseClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { getClientIp, isRateLimited, isValidProductId, sanitizeQuery } from '@/lib/apiSecurity';
 
-// Cliente sin sesión (no hace falta cookie de usuario: cualquiera puede
-// "avisar" que vio un producto, la tabla no tiene datos privados). Usa la
-// anon key, así que respeta las policies de tracked_products del schema.
-function anonClient() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (!url || !key) return null;
-  return createSupabaseClient(url, key, { auth: { persistSession: false } });
-}
+// Escribe con la service_role key, no con la anon key.
+//
+// tracked_products ya no tiene policy de insert/update para nadie (ver
+// supabase/schema.sql): la anon key es pública por diseño, así que dejarle
+// escribir directo era una puerta abierta a inflar la tabla saltándose el
+// rate limit de esta misma ruta. La service_role ignora RLS por completo,
+// así que la única forma de llegar a esta tabla pasa OBLIGATORIAMENTE por
+// acá — y por el isRateLimited de más abajo.
 
 export async function POST(request: NextRequest) {
   if (isRateLimited('track-product:' + getClientIp(request))) {
@@ -31,19 +30,21 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'El parámetro "ean" es inválido o falta.' }, { status: 400 });
   }
 
-  const supabase = anonClient();
-  if (!supabase) {
-    // Sin Supabase configurado (ej: entorno de demo) esto no es un error
-    // fatal — el historial de precios simplemente no funciona todavía.
+  const admin = createAdminClient();
+  if (!admin) {
+    // Sin SUPABASE_SERVICE_ROLE_KEY configurada (ej: entorno de demo) esto
+    // no es un error fatal — el historial de precios simplemente no
+    // funciona todavía.
     return NextResponse.json({ tracked: false });
   }
 
-  const { error } = await supabase
+  const { error } = await admin
     .from('tracked_products')
     .upsert({ ean, nombre, last_seen_at: new Date().toISOString() }, { onConflict: 'ean' });
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.error('[track-product]', error.message);
+    return NextResponse.json({ error: 'No se pudo registrar el producto.' }, { status: 500 });
   }
   return NextResponse.json({ tracked: true });
 }

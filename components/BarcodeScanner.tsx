@@ -61,7 +61,18 @@ export default function BarcodeScanner({
 
         await scanner.start(
           { facingMode: 'environment' },
-          { fps: 10, qrbox: { width: 260, height: 160 } },
+          {
+            fps: 15,
+            // Los códigos de barra son bien horizontales (mucho más anchos
+            // que altos); un recuadro más bajo hace foco en esa franja y
+            // deja de perder tiempo escaneando arriba/abajo del código.
+            // (Nota: si el navegador tiene la Barcode Detection API nativa
+            // — Chrome/Edge en Android y cada vez más en desktop —,
+            // Html5Qrcode ya la prefiere automáticamente por sobre su
+            // decodificador en JS puro, notablemente más lento; no hace
+            // falta pedirlo a mano acá.)
+            qrbox: { width: 280, height: 120 },
+          },
           (decodedText: string) => {
             // Encontró un código: paramos la cámara y avisamos para arriba.
             if (stoppingRef.current) return;

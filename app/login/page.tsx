@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
-import { getPasswordChecks, getPasswordStrength } from '@/lib/passwordStrength';
+import { getPasswordChecks, getPasswordStrength, meetsPasswordPolicy } from '@/lib/passwordStrength';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -36,7 +36,15 @@ export default function LoginPage() {
       return;
     }
 
-    // registro
+    // registro: acá se EXIGE la política que la checklist viene mostrando.
+    // Antes esta validación no existía en ningún lado (ni acá ni en el
+    // servidor) y la lista de requisitos era decorativa.
+    if (!meetsPasswordPolicy(password)) {
+      setError('La contraseña tiene que cumplir los cuatro requisitos de abajo.');
+      setLoading(false);
+      return;
+    }
+
     const { data, error: signUpError } = await supabase.auth.signUp({
       email,
       password,
@@ -139,7 +147,7 @@ export default function LoginPage() {
                 type={showPassword ? 'text' : 'password'}
                 autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
                 required
-                minLength={mode === 'signup' ? 8 : 6}
+                minLength={8}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
@@ -228,6 +236,15 @@ function PwCheckItem({ met, text }: { met: boolean; text: string }) {
 function traducirError(msg: string): string {
   if (msg.includes('Invalid login credentials')) return 'Email o contraseña incorrectos.';
   if (msg.includes('User already registered')) return 'Ya existe una cuenta con ese email.';
-  if (msg.includes('Password should be at least')) return 'La contraseña tiene que tener al menos 6 caracteres.';
-  return msg;
+  if (msg.includes('Password should be at least')) return 'La contraseña tiene que tener al menos 8 caracteres.';
+  if (msg.includes('Email not confirmed')) return 'Todavía no confirmaste tu email. Revisá tu correo.';
+  if (msg.toLowerCase().includes('rate limit') || msg.includes('Too many'))
+    return 'Demasiados intentos. Esperá un momento y probá de nuevo.';
+  // Cualquier otro error se devuelve genérico: los mensajes crudos de
+  // Supabase/GoTrue cuentan detalles del backend (nombres de tablas,
+  // proveedores configurados, estado interno de la cuenta) que no le sirven
+  // a la persona y sí a alguien que esté sondeando la app. El detalle queda
+  // en la consola del navegador de quien lo sufre, para poder debuggear.
+  console.error('[auth]', msg);
+  return 'No pudimos completar la operación. Probá de nuevo en un momento.';
 }

@@ -1,10 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { PRECIOS_CLAROS_HEADERS } from '@/lib/preciosClarosBase';
+import { fetchPreciosClaros } from '@/lib/preciosClarosBase';
 import { getClientIp, isRateLimited, parseLat, parseLimit, parseLng, RATE_LIMITS, sanitizeQuery } from '@/lib/apiSecurity';
 
 const API_URL =
   process.env.PRECIOS_CLAROS_API_URL ||
   'https://d3e6htiiul5ek9.cloudfront.net/prod/productos';
+
+// Le da más margen a la función serverless para el timeout + reintento de
+// fetchPreciosClaros (hasta ~14s en el peor caso) sin que Vercel la corte
+// antes de que termine de reintentar.
+export const maxDuration = 20;
 
 // Este endpoint corre en el servidor de Vercel, no en el navegador del usuario.
 // Por eso el bloqueo CORS de Precios Claros no aplica acá: el navegador
@@ -38,13 +43,10 @@ export async function GET(request: NextRequest) {
   const url = `${API_URL}?string=${encodeURIComponent(term)}&lat=${lat}&lng=${lng}&offset=0&limit=${limit}&sort=-cant_sucursales_disponible`;
 
   try {
-    const upstream = await fetch(url, {
-      headers: PRECIOS_CLAROS_HEADERS,
-      // Seis horas. Los precios cambian durante el día (promos, ajustes de
-      // lista) y esto alimenta la vidriera: una semana de caché, como estaba
-      // antes, mostraba precios que ya no existían.
-      next: { revalidate: 60 * 60 * 6 },
-    });
+    // Seis horas de caché. Los precios cambian durante el día (promos,
+    // ajustes de lista) y esto alimenta la vidriera: una semana de caché,
+    // como estaba antes, mostraba precios que ya no existían.
+    const upstream = await fetchPreciosClaros(url, 60 * 60 * 6);
 
     if (!upstream.ok) {
       return NextResponse.json(

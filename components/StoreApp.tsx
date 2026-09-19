@@ -20,13 +20,13 @@ import { getMonthlyHistory, migrateGuestSavingsToAccount } from '@/lib/savingsHi
 import { FREE_CART_PRODUCT_LIMIT, isPremium } from '@/lib/premium';
 import { FREE_COMPARE_LIMIT, cartSignature, getCompareUsage, markRevealed, registerCompareUse, wasAlreadyRevealed } from '@/lib/compareLimit';
 import { clearSharedCartFromUrl, readSharedCartFromUrl, SharedCartPayload } from '@/lib/sharedCart';
+import { applyTheme, resolveInitialTheme, readStoredTheme, systemTheme, Theme } from '@/lib/theme';
 
 import Header from './Header';
 import SavingsCard from './SavingsCard';
-import SearchBox from './SearchBox';
 import CategoryChips from './CategoryChips';
 import { extractEan, groupLiveItems, LiveItem, normalizeEan, SortOrder } from '@/lib/liveItems';
-import { getProductNameByEan, resolveSearchableName } from '@/lib/productImage';
+import { getProductImageUrl, getProductNameByEan, photoLookupName, resolveSearchableName } from '@/lib/productImage';
 import CategoryProductList from './CategoryProductList';
 import SortMenu from './SortMenu';
 import { fetchNearbyStores, NearbyStore } from '@/lib/storePrices';
@@ -49,6 +49,56 @@ const PhotoSearch = dynamic(() => import('./PhotoSearch'));
 const SavingsHistoryModal = dynamic(() => import('./SavingsHistoryModal'));
 const PremiumModal = dynamic(() => import('./PremiumModal'));
 
+// De cada rubro del inicio (ver HOME_TEASER_QUERIES) llegan varios
+// candidatos, no uno solo (ver el comentario de HOME_TEASER_RESULTS_PER_QUERY
+// en lib/products.ts). Acá elegimos, por rubro, el primero que tenga foto —
+// y si ninguno la tiene, recién ahí cae al primero tal cual antes. Todos los
+// chequeos de foto se disparan juntos (no rubro por rubro) para que
+// getProductImageUrl los agrupe en la menor cantidad posible de pedidos a
+// /api/imagenes, y de paso queden en caché para cuando la tarjeta los vuelva
+// a pedir.
+async function pickHomeTeaserWithPhotos(slots: LiveItem[][]): Promise<LiveItem[]> {
+  const perSlot = await Promise.all(
+    slots.map(async (candidates) => {
+      if (!candidates.length) return null;
+      const withPhoto = await Promise.all(
+        candidates.map(async (item) => {
+          const ean = extractEan(item);
+          const url = ean ? await getProductImageUrl(ean, photoLookupName(item)) : null;
+          return { item, hasPhoto: !!url };
+        })
+      );
+      const found = withPhoto.find((c) => c.hasPhoto);
+      return (found ?? withPhoto[0]).item;
+    })
+  );
+  return perSlot.filter((item): item is LiveItem => !!item);
+}
+
+// Esqueleto de carga con la MISMA forma que una fila real de producto
+// (foto cuadrada + marca + nombre + precio a la derecha). Antes eran dos
+// barras grises genéricas: al llegar los datos la página se reacomodaba
+// entera y daba la sensación de que algo se había roto. Con la silueta
+// correcta, los productos aparecen "dentro" del hueco que ya estaban
+// ocupando.
+function ListSkeleton({ rows }: { rows: number }) {
+  return (
+    <div className="sk-section" aria-hidden="true">
+      {Array.from({ length: rows }).map((_, i) => (
+        <div className="sk-row" key={i}>
+          <div className="sk-media" />
+          <div className="sk-text">
+            <div className="sk-bar sm" />
+            <div className="sk-bar lg" />
+            <div className="sk-bar md" />
+          </div>
+          <div className="sk-price" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function StoreApp({
   userId,
   userEmail,
@@ -66,7 +116,10 @@ export default function StoreApp({
   // sumarlo al suyo antes de tocar nada del carrito actual.
   const [sharedCartOffer, setSharedCartOffer] = useState<SharedCartPayload | null>(null);
   const router = useRouter();
-  const [theme, setTheme] = useState<'light' | 'dark'>('light');
+  // Arranca en claro solo para el render del servidor; el script inline de
+  // app/layout.tsx ya dejó el data-theme correcto en <html> antes del
+  // primer pintado, y el efecto de abajo sincroniza este estado con eso.
+  const [theme, setTheme] = useState<Theme>('light');
   const [cartLoaded, setCartLoaded] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [syncError, setSyncError] = useState(false);
@@ -237,10 +290,39 @@ export default function StoreApp({
     router.refresh();
   }
 
-  // header: sombra/blur más marcado al scrollear
+  // Toma el tema que el script de arranque ya dejó puesto (elección
+  // guardada, o la del sistema si nunca eligió) y, mientras no haya elegido
+  // a mano, sigue al sistema en vivo: si el celular pasa a oscuro de noche,
+  // la app acompaña sin recargar.
+  useEffect(() => {
+    setTheme(resolveInitialTheme());
+    if (!window.matchMedia) return;
+    const mq = window.matchMedia('(prefers-color-scheme: dark)');
+    const onChange = () => {
+      if (readStoredTheme()) return; // eligió a mano: su elección manda
+      const next = systemTheme();
+      setTheme(next);
+      applyTheme(next);
+    };
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
+
+  function toggleTheme() {
+    setTheme((prev) => {
+      const next = prev === 'dark' ? 'light' : 'dark';
+      applyTheme(next, true);
+      return next;
+    });
+  }
+
+  // header: sombra/blur más marcado al scrollear. passive:true porque el
+  // handler no llama a preventDefault — sin eso el navegador tiene que
+  // esperar a que termine antes de mover la página, y el scroll se siente
+  // pesado justo mientras se recorre el catálogo.
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 4);
-    window.addEventListener('scroll', onScroll);
+    window.addEventListener('scroll', onScroll, { passive: true });
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
 
@@ -311,6 +393,11 @@ export default function StoreApp({
 
     async function loadCatalog() {
       const merged: LiveItem[] = [];
+      // Solo para el inicio: candidatos por búsqueda, en el mismo orden que
+      // HOME_TEASER_QUERIES, para poder elegir después el que tenga foto
+      // (ver pickHomeTeaserWithPhotos). En un rubro puntual seguimos
+      // mostrando todo tal como llega, sin esperar fotos.
+      const homeSlots: LiveItem[][] = isHome ? queries.map(() => []) : [];
       for (let i = 0; i < queries.length; i += BATCH_SIZE) {
         if (cancelled) return;
         const batch = queries.slice(i, i + BATCH_SIZE);
@@ -322,20 +409,39 @@ export default function StoreApp({
               .catch(() => [] as LiveItem[])
           )
         );
-        merged.push(...results.flat());
-        if (!cancelled) {
-          // vamos mostrando lo que ya llegó, en vez de tapar todo hasta el final
-          setCatalogItems((prev) => (isFirstPage ? [...merged] : [...prev, ...results.flat()]));
-          setCatalogLoading(false);
+        if (isHome) {
+          results.forEach((candidates, j) => {
+            homeSlots[i + j] = candidates;
+          });
+          // Acá no pisamos catalogItems todavía: si mostráramos el primer
+          // candidato de cada rubro apenas llega y después lo cambiáramos
+          // por el que sí tiene foto, la portada "parpadearía". Se espera a
+          // tener todos los candidatos (ver más abajo).
+        } else {
+          merged.push(...results.flat());
+          if (!cancelled) {
+            // vamos mostrando lo que ya llegó, en vez de tapar todo hasta el final
+            setCatalogItems((prev) => (isFirstPage ? [...merged] : [...prev, ...results.flat()]));
+            setCatalogLoading(false);
+          }
         }
       }
       if (cancelled) return;
       setLoadingMore(false);
 
-      if (merged.length) {
+      let finalItems = merged;
+      if (isHome) {
+        finalItems = await pickHomeTeaserWithPhotos(homeSlots);
+        if (!cancelled) {
+          setCatalogItems(finalItems);
+          setCatalogLoading(false);
+        }
+      }
+
+      if (finalItems.length) {
         // se pudo traer bien: guardamos la primera tanda como respaldo para
         // el día que la API de Precios Claros esté caída o bloqueando.
-        if (isFirstPage) saveCatalogCache(activeCategory, merged);
+        if (isFirstPage) saveCatalogCache(activeCategory, finalItems);
         setCatalogStatus('');
       } else if (isFirstPage) {
         // la API no devolvió nada (caída, bloqueo, timeout): probamos
@@ -678,7 +784,8 @@ export default function StoreApp({
   // no tiene que poder scrollear: en el celu pasaba que arrastrabas dentro
   // del carrito y se movía la página de atrás, y al cerrar habías perdido el
   // lugar donde estabas.
-  const anySheetOpen = cartOpen || savingsHistoryOpen || premiumModalOpen || scannerOpen;
+  const anySheetOpen =
+    cartOpen || savingsHistoryOpen || premiumModalOpen || scannerOpen || photoSearchOpen;
   useEffect(() => {
     if (!anySheetOpen) return;
     const previous = document.body.style.overflow;
@@ -694,13 +801,22 @@ export default function StoreApp({
     if (!anySheetOpen) return;
     function onKey(e: KeyboardEvent) {
       if (e.key !== 'Escape') return;
-      setCartOpen(false);
-      setSavingsHistoryOpen(false);
-      setScannerOpen(false);
+      closeAllSheets();
     }
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
   }, [anySheetOpen]);
+
+  // Cerrar TODO lo que esté abierto (hojas y modales). Antes Escape cerraba
+  // solo tres de los cinco: la búsqueda por foto y el modal de Premium se
+  // quedaban abiertos y encima dejaban el fondo sin poder scrollear.
+  function closeAllSheets() {
+    setCartOpen(false);
+    setSavingsHistoryOpen(false);
+    setScannerOpen(false);
+    setPhotoSearchOpen(false);
+    setPremiumModalOpen(false);
+  }
 
   function scrollToCompare() {
     setCartOpen(false);
@@ -763,13 +879,6 @@ export default function StoreApp({
         handleSearchChange('');
         window.scrollTo({ top: 0, behavior: 'smooth' });
         break;
-      case 'buscar':
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-        setTimeout(() => {
-          const input = document.querySelector<HTMLInputElement>('.search-box input');
-          input?.focus();
-        }, 200);
-        break;
       case 'carrito':
         setCartOpen(true);
         break;
@@ -794,11 +903,13 @@ export default function StoreApp({
     return (
       <div className="app-loading">
         <div className="loading-cart-wrap">
-          <svg className="loading-cart" width="46" height="46" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
-            <path d="M3 4h2l1.6 9.6a2 2 0 0 0 2 1.7h7.6a2 2 0 0 0 2-1.6L20 8H6.2" />
-            <circle cx="9.5" cy="19" r="1.3" />
-            <circle cx="16.5" cy="19" r="1.3" />
-          </svg>
+          <div className="loading-cart-drive">
+            <svg className="loading-cart" width="46" height="46" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3 4h2l1.6 9.6a2 2 0 0 0 2 1.7h7.6a2 2 0 0 0 2-1.6L20 8H6.2" />
+              <circle cx="9.5" cy="19" r="1.3" />
+              <circle cx="16.5" cy="19" r="1.3" />
+            </svg>
+          </div>
           <div className="loading-track" />
         </div>
         <div>Cargando tu carrito...</div>
@@ -807,10 +918,11 @@ export default function StoreApp({
   }
 
   return (
-    <div
-      data-theme={theme}
-      style={{ background: 'var(--bg)', color: 'var(--ink)', minHeight: '100dvh', transition: 'background .2s ease, color .2s ease' }}
-    >
+    // El data-theme ya no va acá: lo pone el script de arranque sobre
+    // <html> (ver lib/theme.ts). Puesto en este div, el fondo del documento
+    // seguía blanco en modo oscuro y se veía una franja clara al rebotar el
+    // scroll o al abrir /login y /legales.
+    <div style={{ minHeight: '100dvh' }}>
       {sharedCartOffer && (
         <div className="shared-cart-banner" role="status">
           <div className="shared-cart-banner-text">
@@ -832,15 +944,12 @@ export default function StoreApp({
       )}
       <div className="wrap">
         <Header
-          cartCount={cartCount}
-          cartPop={cartPop}
-          onCartClick={() => {
-            setActiveTab('carrito');
-            setSavingsHistoryOpen(false);
-            setCartOpen(true);
-          }}
           theme={theme}
-          onToggleTheme={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
+          onToggleTheme={toggleTheme}
+          searchValue={searchTerm}
+          onSearchChange={handleSearchChange}
+          onPhotoSearch={() => setPhotoSearchOpen(true)}
+          onScan={() => setScannerOpen(true)}
           scrolled={scrolled}
           userId={userId}
           userEmail={userEmail}
@@ -871,25 +980,12 @@ export default function StoreApp({
           }}
         />
 
-        <SearchBox
-          value={searchTerm}
-          onChange={handleSearchChange}
-          onPhotoSearch={() => setPhotoSearchOpen(true)}
-        />
-
-        <button className="scan-cta" onClick={() => setScannerOpen(true)}>
-          <span className="scan-cta-icon">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2" />
-              <path d="M7 8v8M10.5 8v8M13 8v8M16 8v3M16 15v1M19 8v8" />
-            </svg>
-          </span>
-          Escaneá un código de barras
-          <svg className="scan-cta-arrow" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
-            <path d="m9 6 6 6-6 6" />
-          </svg>
-        </button>
-
+        {/* El buscador subió al header (que es sticky) y el botón grande de
+            "Escaneá un código de barras" se fue con él, convertido en un
+            ícono adentro de la misma caja: era una tercera puerta al mismo
+            escáner que ya tienen el botón central de la barra de abajo y el
+            propio buscador, y se comía una franja entera de la portada
+            antes de que se viera un solo producto. */}
         {!liveMode && (
           <NearbyDealsFeed
             pool={catalogItems}
@@ -923,12 +1019,7 @@ export default function StoreApp({
         <div>
           {liveMode ? (
             liveLoading ? (
-              Array.from({ length: 3 }).map((_, i) => (
-                <div className="skeleton" key={i}>
-                  <div className="sk-line w60" />
-                  <div className="sk-line full" />
-                </div>
-              ))
+              <ListSkeleton rows={3} />
             ) : liveItems.length ? (
               <CategoryProductList
                 items={displayedLiveItems}
@@ -948,12 +1039,7 @@ export default function StoreApp({
               </div>
             )
           ) : catalogLoading ? (
-            Array.from({ length: 4 }).map((_, i) => (
-              <div className="skeleton" key={i}>
-                <div className="sk-line w60" />
-                <div className="sk-line full" />
-              </div>
-            ))
+            <ListSkeleton rows={5} />
           ) : filteredCatalog.length === 0 ? (
             <div className="empty-state">
               <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
@@ -1007,7 +1093,13 @@ export default function StoreApp({
 
       <CartSheet
         open={cartOpen}
-        onClose={() => setCartOpen(false)}
+        onClose={() => {
+          setCartOpen(false);
+          // La pestaña quedaba marcada en "Carrito" después de cerrar la
+          // hoja, así que la barra de abajo decía que estabas en una
+          // pantalla que ya no estaba abierta.
+          setActiveTab('inicio');
+        }}
         selected={selected}
         productIndex={productIndex}
         stores={storeNames}
@@ -1032,7 +1124,10 @@ export default function StoreApp({
 
       <SavingsHistoryModal
         open={savingsHistoryOpen}
-        onClose={() => setSavingsHistoryOpen(false)}
+        onClose={() => {
+          setSavingsHistoryOpen(false);
+          setActiveTab('inicio');
+        }}
         userId={userId}
         refreshKey={savingsRefreshKey}
       />

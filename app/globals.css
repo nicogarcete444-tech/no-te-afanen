@@ -19,6 +19,13 @@
      concreto era que no se vea todo amontonado.
    ============================================================ */
   :root{
+    /* Le avisa al navegador en qué modo está la app: con esto las barras de
+       scroll, los <input> nativos, el fondo del documento antes de que
+       pinte el CSS y el rebote del scroll en iOS salen en el tono correcto.
+       Sin esto, en modo oscuro quedaban barras de scroll blancas. */
+    color-scheme:light;
+    accent-color:#5B4BE8;
+
     /* Neutros */
     --bg:#F7F7F5;
     --surface:#FFFFFF;
@@ -72,6 +79,8 @@
     --shadow-md:0 2px 4px rgba(20,20,26,.04), 0 12px 28px -12px rgba(20,20,26,.16);
   }
   [data-theme="dark"]{
+    color-scheme:dark;
+
     --bg:#0E0E12;
     --surface:#17171D;
     --surface-2:#1F1F27;
@@ -102,6 +111,10 @@
   }
   *{box-sizing:border-box;}
   html,body{margin:0;padding:0;}
+  /* El fondo va también en <html>: es lo que se ve al pasarse de scroll en
+     iOS/Android y detrás de la barra del navegador. Con el fondo solo en un
+     div interno, en modo oscuro aparecía una franja blanca al rebotar. */
+  html{background:var(--bg);}
   body{
     background:var(--bg);
     color:var(--ink);
@@ -113,7 +126,7 @@
   h1,h2,h3,.display{font-family:var(--font-archivo),sans-serif;font-weight:700;letter-spacing:-0.025em;margin:0;}
   .wrap{max-width:600px;margin:0 auto;padding:0 20px;padding-bottom:calc(74px + env(safe-area-inset-bottom));}
   ::selection{background:var(--gold);color:#fff;}
-  button, .chip, .product-card{-webkit-tap-highlight-color:transparent;}
+  button, .chip, .cat-row, .deal-card{-webkit-tap-highlight-color:transparent;}
 
   .bottom-nav{
     position:fixed;left:12px;right:12px;bottom:calc(10px + env(safe-area-inset-bottom));z-index:35;
@@ -124,6 +137,16 @@
     border:1px solid var(--line);border-radius:999px;
     padding:7px 8px;
     box-shadow:var(--shadow-md);
+    transition:transform .25s ease, opacity .2s ease;
+  }
+  /* Se aplica cuando el final de la página (el Footer) ya está a la vista:
+     antes la barra, al ser fixed, quedaba siempre flotando encima de ese
+     contenido. La deslizamos hacia abajo y la sacamos de la interacción en
+     vez de solo bajarle la opacidad, para que tampoco robe los taps de lo
+     que hay debajo. */
+  .bottom-nav.bottom-nav-hidden{
+    transform:translateY(calc(100% + 24px + env(safe-area-inset-bottom)));
+    opacity:0;pointer-events:none;
   }
   .cart-limit-toast{
     position:fixed;left:16px;right:16px;bottom:calc(86px + env(safe-area-inset-bottom));z-index:95;
@@ -186,15 +209,26 @@
     transform:translateY(-22px);
     border:4px solid var(--bg);
   }
-  button:focus-visible, .chip:focus-visible, input:focus-visible{outline:2px solid var(--lime-dark);outline-offset:2px;}
+  /* Un solo anillo de foco para todo lo que se puede tabular, incluidas
+     las filas de producto (que son role="button" y antes no mostraban
+     nada al llegar con el teclado). */
+  button:focus-visible, .chip:focus-visible, input:focus-visible,
+  a:focus-visible, .cat-row:focus-visible, [role="button"]:focus-visible{
+    outline:2px solid var(--accent);outline-offset:2px;border-radius:6px;
+  }
   @keyframes fadeUp{ from{opacity:0; transform:translateY(4px);} to{opacity:1; transform:translateY(0);} }
   @keyframes pulse{ 0%,100%{opacity:.5;} 50%{opacity:1;} }
   @keyframes tearIn{ from{opacity:0; transform:translateY(8px) scale(.99);} to{opacity:1; transform:translateY(0) scale(1);} }
 
   header{
-    border-bottom:1px solid transparent;padding:18px 0 16px;position:sticky;top:0;
-    background:color-mix(in srgb, var(--bg) 82%, transparent);
-    backdrop-filter:blur(14px) saturate(160%);-webkit-backdrop-filter:blur(14px) saturate(160%);
+    border-bottom:1px solid transparent;position:sticky;top:0;
+    /* Márgenes negativos + el mismo padding de .wrap: el header es hijo de
+       .wrap, así que sin esto su fondo terminaba 20px antes de cada borde
+       de la pantalla y el contenido se veía pasar por esos dos costados al
+       scrollear, por debajo del blur. Ahora tapa de lado a lado. */
+    margin:0 -20px;padding:16px 20px 12px;
+    background:color-mix(in srgb, var(--bg) 88%, transparent);
+    backdrop-filter:blur(16px) saturate(160%);-webkit-backdrop-filter:blur(16px) saturate(160%);
     /* Mayor que el de .bottom-nav (35): al ser sticky con z-index, el header
        arma su propio contexto de apilamiento, así que todo lo que se abre
        ADENTRO (el panel de cuenta, el de notificaciones) queda encapsulado
@@ -204,9 +238,23 @@
        superpuestos y cortados por los íconos de "Buscar/Comparar/Perfil".
        Subiendo el header por encima de la barra inferior, sus paneles
        vuelven a taparla entera, como corresponde a un menú abierto. */
-    z-index:40;transition:border-color .2s ease, background .2s ease;
+    z-index:40;
+    transition:border-color .2s ease, background .2s ease, padding .2s ease, box-shadow .2s ease;
   }
-  header.scrolled{border-bottom-color:var(--line);}
+  /* Al scrollear el header se achica en vez de quedarse del mismo alto: con
+     el buscador adentro, mantener los 16px de arriba + el subtítulo + los
+     14px de separación se comía casi 150px fijos de pantalla en un celular.
+     Se va lo prescindible (el subtítulo de la marca) y queda lo que se usa
+     (marca, cuenta y el campo de búsqueda). */
+  header.scrolled{
+    border-bottom-color:var(--line);
+    padding-top:10px;padding-bottom:10px;
+    box-shadow:0 10px 24px -22px rgba(0,0,0,.6);
+  }
+  .head-actions{display:flex;align-items:center;gap:2px;}
+  .head-search{margin-top:14px;transition:margin-top .2s ease;}
+  header.scrolled .head-search{margin-top:10px;}
+  header.scrolled .brand-icon{width:32px;height:32px;border-radius:10px;}
   .head-row{display:flex;align-items:center;justify-content:space-between;}
   .brand{display:flex;align-items:center;gap:9px;}
   .brand-icon{
@@ -214,10 +262,16 @@
     width:36px;height:36px;border-radius:12px;background:var(--accent-wash);
   }
   .brand-name{font-family:var(--font-archivo),sans-serif;font-weight:800;font-size:16.5px;letter-spacing:-0.035em;}
-  .brand-sub{font-size:11px;color:var(--ink-faint);margin-top:1px;letter-spacing:-0.005em;}
+  .brand-sub{
+    font-size:11px;color:var(--ink-faint);margin-top:1px;letter-spacing:-0.005em;
+    max-height:16px;opacity:1;overflow:hidden;
+    transition:max-height .2s ease, opacity .15s ease;
+  }
+  header.scrolled .brand-sub{max-height:0;opacity:0;}
+  .brand-icon{transition:width .2s ease, height .2s ease, border-radius .2s ease;}
 
   .theme-toggle{
-    width:38px;height:38px;border-radius:50%;border:none;
+    width:40px;height:40px;border-radius:50%;border:none;
     background:none;display:flex;align-items:center;justify-content:center;
     cursor:pointer;color:var(--ink-soft);transition:background .15s ease, color .15s ease;
   }
@@ -231,52 +285,83 @@
   .cart-badge.pop{animation:pop .3s ease;}
   @keyframes pop{ 0%{transform:scale(1);} 40%{transform:scale(1.35);} 100%{transform:scale(1);} }
 
-  /* savings hero — pensada como el ticket que te ahorrás: un solo momento
-     de carácter en la página. Pasamos por casi negro (muy oscuro) y por un
-     lavado violeta clarísimo (muy suave, perdía peso); esto queda en el
-     medio: violeta de marca a media intensidad, con texto blanco encima, y
-     el mismo tono en claro y oscuro para no perder identidad al cambiar de
-     tema. */
+  /* ============================================================
+     Tarjeta de ahorro — "el ticket"
+     ============================================================
+     Reemplaza el hero con foto de stock + degradé violeta. El problema de
+     esa versión no era el gusto: era que la foto de las bolsas de súper es
+     un recurso de banco de imágenes que cualquier comparador del mundo
+     puede tener puesto, y encima obligaba a pelear el contraste del texto
+     contra ella (tres text-shadow y un overlay que había que ir corriendo
+     a mano cada vez que el texto crecía un renglón).
+
+     Ahora la forma sale de la app: superficie oscura, el violeta de marca
+     como resplandor y no como fondo, y el borde de abajo picado como el de
+     un ticket de caja. No depende de ningún archivo, no pesa nada, y se ve
+     nítido en cualquier densidad de pantalla.
+     ============================================================ */
   .savings-card{
-    position:relative;color:#fff;border-radius:var(--r-xl);
-    background:
-      linear-gradient(100deg, rgba(48,38,140,.62) 0%, rgba(48,38,140,.32) 42%, rgba(48,38,140,0) 62%),
-      linear-gradient(150deg, #6C5CE3 0%, #8B7FF5 100%);
-    background-image:
-      linear-gradient(100deg, rgba(48,38,140,.62) 0%, rgba(48,38,140,.32) 42%, rgba(48,38,140,0) 62%),
-      url('/images/hero-cart.webp');
-    background-size:cover;background-position:center right;background-repeat:no-repeat;
-    padding:26px 24px 28px;margin:24px 0 0;overflow:hidden;
+    position:relative;overflow:hidden;
+    margin:22px 0 20px;
+    padding:24px 22px 30px;
+    /* Sin redondeo abajo: ese borde lo define el picado del ticket. */
+    border-radius:var(--r-lg) var(--r-lg) 0 0;
+    background:var(--ink-surface);
+    color:#fff;
     box-shadow:var(--shadow-md);
     animation:tearIn .35s cubic-bezier(.2,.8,.2,1) both;
-    min-height:150px;display:flex;align-items:center;
   }
-  .savings-copy{position:relative;min-width:0;max-width:58%;}
+  /* Resplandor de marca arriba a la derecha. */
+  .savings-card::before{
+    content:'';position:absolute;right:-70px;top:-90px;width:240px;height:240px;
+    border-radius:50%;pointer-events:none;
+    background:radial-gradient(circle, color-mix(in srgb, var(--accent) 72%, transparent) 0%, transparent 62%);
+  }
+  /* El picado: semicírculos del color del fondo de la página comidos al
+     borde inferior. Es un radial-gradient repetido, no una imagen ni una
+     máscara exótica, así que funciona en todos los navegadores del target
+     y sigue al tema claro/oscuro solo (usa var(--bg)). */
+  .savings-card::after{
+    content:'';position:absolute;left:0;right:0;bottom:-1px;height:13px;pointer-events:none;
+    background:radial-gradient(circle at 8px 13px, var(--bg) 6.5px, transparent 7px) 0 0/16px 13px repeat-x;
+  }
+  .savings-copy{position:relative;z-index:1;min-width:0;}
   .savings-label{
-    font-size:11.5px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;
-    color:rgba(255,255,255,.75);
+    font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;
+    color:color-mix(in srgb, #fff 58%, transparent);
   }
   .savings-amount{
-    font-family:var(--font-archivo),sans-serif;font-size:38px;font-weight:800;color:#fff;
-    letter-spacing:-0.035em;font-variant-numeric:tabular-nums;line-height:1;margin-top:6px;
+    font-family:var(--font-archivo),sans-serif;font-size:clamp(32px, 9vw, 42px);font-weight:800;color:#fff;
+    letter-spacing:-0.04em;font-variant-numeric:tabular-nums;line-height:1;margin-top:9px;
   }
   .savings-detail{
-    font-size:12.5px;color:rgba(255,255,255,.85);margin-top:10px;line-height:1.5;
+    font-size:12.5px;line-height:1.5;margin-top:10px;max-width:36ch;
+    color:color-mix(in srgb, #fff 66%, transparent);overflow-wrap:break-word;
   }
   .savings-cta{
-    position:relative;display:inline-flex;align-items:center;gap:6px;margin-top:16px;
-    background:#fff;color:var(--accent-ink);border:none;border-radius:999px;
-    padding:9px 15px;font-size:12.5px;font-weight:700;font-family:var(--font-archivo),sans-serif;
+    position:relative;z-index:1;display:inline-flex;align-items:center;gap:6px;margin-top:18px;
+    background:#fff;color:#15151A;border:none;border-radius:999px;
+    padding:10px 16px;font-size:12.5px;font-weight:700;font-family:var(--font-archivo),sans-serif;
     cursor:pointer;transition:transform .15s ease, opacity .15s ease;
   }
-  .savings-cta:hover{opacity:.92;}
+  .savings-cta:hover{opacity:.9;}
   .savings-cta:active{transform:scale(.96);}
-  .savings-dots{display:flex;align-items:center;justify-content:center;gap:6px;margin:12px 0 28px;}
-  .savings-dot{width:6px;height:6px;border-radius:50%;background:var(--line-strong);}
-  .savings-dot.is-active{width:16px;border-radius:3px;background:var(--accent);}
+
+  /* Todavía sin ahorro registrado (app recién instalada). Un "$ 0" de 42px
+     ocupando el primer tercio de la portada es el peor recibimiento
+     posible y encima empuja los productos abajo del pliegue: acá la misma
+     tarjeta se pone en una sola línea y devuelve esa altura al catálogo. */
+  .savings-card.is-empty{
+    display:flex;align-items:center;gap:14px;flex-wrap:wrap;
+    padding:16px 20px 22px;margin:18px 0 16px;
+  }
+  .savings-card.is-empty .savings-copy{flex:1 1 190px;}
+  .savings-card.is-empty .savings-amount{font-size:22px;margin-top:3px;}
+  .savings-card.is-empty .savings-detail{font-size:11.5px;margin-top:5px;}
+  .savings-card.is-empty .savings-cta{margin-top:0;padding:9px 14px;font-size:12px;}
 
   /* search + chips */
-  .search-box-wrap{position:relative;margin-top:6px;}
+  .search-box-wrap{position:relative;}
   .search-box{
     display:flex;align-items:center;gap:11px;background:var(--surface);
     border:1px solid var(--line);border-radius:var(--r-md);padding:14px 16px;
@@ -391,52 +476,18 @@
   }
   .chip.active .chip-icon{background:var(--accent-wash);}
   .chip-icon svg{display:block;}
-  .chip-underline{width:16px;height:2px;border-radius:2px;background:transparent;}
-  .chip.active .chip-underline{background:var(--accent);}
 
   .list-header{display:flex;justify-content:space-between;align-items:center;margin:34px 0 4px;gap:10px;flex-wrap:nowrap;}
   .list-header h2{font-size:17px;letter-spacing:-0.03em;margin:0;min-width:0;flex:1 1 auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   .list-header-right{display:flex;align-items:center;gap:10px;margin-left:auto;flex-shrink:0;}
   .list-count{font-size:12px;color:var(--ink-faint);white-space:nowrap;}
 
-  /* product list — filas divididas, sin cajas */
-  .product-card{
-    background:none;border:none;border-bottom:1px solid var(--line);
-    border-radius:0;padding:18px 0;margin-bottom:0;cursor:pointer;
-    animation:fadeUp .2s ease both;
-    transition:opacity .12s ease;
-  }
-  .product-card:last-child{border-bottom:none;}
-  .product-card:hover .product-name{color:var(--purple-2);}
-  .product-card:active{opacity:.55;}
-  .product-card.selected .product-name{color:var(--purple-2);}
-  .product-top{display:flex;align-items:flex-start;gap:14px;margin-bottom:14px;}
-  .product-media{
-    width:52px;height:52px;border-radius:13px;flex-shrink:0;
-    display:flex;align-items:center;justify-content:center;color:#fff;
-    background:linear-gradient(155deg, var(--media-a), var(--media-b));
-  }
-  .product-info{flex:1;min-width:0;}
-  .product-cat{
-    font-size:11px;font-weight:700;color:var(--purple-2);
-    letter-spacing:.01em;margin-bottom:4px;
-  }
-  .product-name{font-size:14.5px;font-weight:700;line-height:1.32;transition:color .12s ease;}
-  .product-meta-row{display:flex;align-items:center;gap:8px;margin-top:7px;flex-wrap:wrap;}
-  .trend-badge{
-    font-size:11.5px;font-weight:700;display:flex;align-items:center;gap:3px;
-  }
-  .trend-badge.up{color:var(--up);}
-  .trend-badge.down{color:var(--down);}
-  .select-box{
-    display:flex;align-items:center;gap:6px;flex-shrink:0;
-    padding:7px 12px;border-radius:20px;border:none;
-    font-size:12.5px;font-weight:700;color:var(--ink-faint);background:none;
-    transition:background .15s ease, color .15s ease, transform .1s ease;
-  }
-  .product-card:active .select-box{transform:scale(.95);}
-  .product-card.selected .select-box{background:linear-gradient(135deg, var(--purple-1), var(--purple-2));color:#fff;}
-  .select-box .icon{display:flex;align-items:center;}
+  /* Acá vivía el bloque .product-card / .product-media / .select-box /
+     .trend-badge: la tarjeta de producto de una versión anterior del
+     listado. Hoy el catálogo entero se dibuja con .cat-section + .cat-row
+     (ver el bloque de abajo) y ninguna de esas clases quedaba referenciada
+     por un solo componente. Eran ~40 reglas viajando en el CSS de todas
+     las cargas para no pintar nada.
 
   /* listado agrupado por rubro — card por categoría con filas simples
      (imagen + nombre + código + precio), estilo "vidriera por rubro". */
@@ -507,13 +558,23 @@
     font-family:var(--font-archivo),sans-serif;font-weight:800;font-size:15px;
     white-space:nowrap;font-variant-numeric:tabular-nums;letter-spacing:-0.02em;
   }
-  .cat-row-follow{
-    width:30px;height:30px;border-radius:50%;border:none;background:none;color:var(--ink-faint);
-    display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;margin-left:2px;
-    transition:background .15s ease,color .15s ease;
+  /* Agregar / quitar del carrito directo desde la fila. Acá vivía la
+     campanita de "seguir este producto": un objetivo táctil de 30px, para
+     una acción de nicho, repetida en cada una de las cincuenta filas de un
+     rubro. La campanita se fue a la ficha del producto (donde ya estaba) y
+     el lugar lo ocupa ahora la acción que la gente viene a hacer. */
+  .cat-row-add{
+    width:38px;height:38px;border-radius:50%;flex-shrink:0;margin-left:2px;
+    border:1.5px solid var(--line-strong);background:var(--surface);color:var(--ink-soft);
+    display:flex;align-items:center;justify-content:center;cursor:pointer;
+    transition:background .15s ease,color .15s ease,border-color .15s ease,transform .1s ease;
   }
-  .cat-row-follow:hover{background:var(--chip-bg);color:var(--ink);}
-  .cat-row-follow.active{color:var(--gold);}
+  .cat-row-add:hover{border-color:var(--accent);color:var(--accent);}
+  .cat-row-add:active{transform:scale(.88);}
+  .cat-row-add.in-cart{background:var(--accent);border-color:var(--accent);color:#fff;}
+  .cat-row-add.busy{opacity:.55;cursor:default;}
+  .cat-row-add.busy svg{animation:spin .7s linear infinite;}
+  @keyframes spin{to{transform:rotate(360deg);}}
   .cat-row-price-unit{
     font-size:10px;color:var(--ink-faint);white-space:nowrap;font-variant-numeric:tabular-nums;
   }
@@ -523,36 +584,55 @@
   }
   .empty-state svg{margin-bottom:10px;color:var(--ink-faint);}
 
+  /* ---- Esqueletos de carga ----
+     Antes eran dos barras grises sueltas con un latido de opacidad: no se
+     parecían en nada a la fila de producto que venía después, así que al
+     llegar los datos la página pegaba un salto. Ahora el hueco tiene la
+     silueta exacta de la fila real (foto cuadrada + marca + nombre +
+     precio a la derecha), dentro de la misma tarjeta de rubro, y el
+     producto aparece "adentro" del lugar que ya estaba ocupando.
+     El brillo que recorre es más legible que el parpadeo: comunica "esto
+     está llegando" y no "esto está roto". */
+  @keyframes shimmer{from{background-position:180% 0;}to{background-position:-80% 0;}}
+  .sk-media,.sk-bar,.sk-price,.skeleton .sk-line{
+    background-color:var(--surface-2);
+    background-image:linear-gradient(
+      90deg,
+      transparent 0%,
+      color-mix(in srgb, var(--surface) 70%, transparent) 45%,
+      transparent 90%
+    );
+    background-size:200% 100%;background-repeat:no-repeat;
+    animation:shimmer 1.5s ease-in-out infinite;
+  }
+  .sk-section{
+    background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg);
+    padding:14px;margin:16px 0;box-shadow:var(--shadow-sm);
+  }
+  .sk-row{
+    display:flex;align-items:center;gap:13px;padding:13px 8px;
+    border-bottom:1px solid var(--line);
+  }
+  .sk-row:last-child{border-bottom:none;}
+  .sk-media{width:54px;height:54px;border-radius:var(--r-sm);flex-shrink:0;}
+  .sk-text{flex:1;min-width:0;display:flex;flex-direction:column;gap:7px;}
+  .sk-bar{height:9px;border-radius:999px;}
+  .sk-bar.sm{width:34%;height:7px;}
+  .sk-bar.lg{width:82%;height:11px;}
+  .sk-bar.md{width:56%;}
+  .sk-price{width:58px;height:17px;border-radius:7px;flex-shrink:0;}
+
   .skeleton{
     background:none;border:none;border-bottom:1px solid var(--line);
     padding:18px 0;margin-bottom:0;
   }
-  .skeleton .sk-line{height:13px;border-radius:6px;background:var(--chip-bg);animation:pulse 1.1s ease infinite;}
+  .skeleton .sk-line{height:13px;border-radius:6px;}
   .skeleton .sk-line.w60{width:55%;margin-bottom:14px;}
   .skeleton .sk-line.full{height:36px;}
 
-  /* comparación de precios — filas tipográficas con marcador de mejor precio */
-  .price-grid{display:grid;grid-template-columns:1fr 1fr;column-gap:18px;row-gap:0;}
-  .price-cell{
-    padding:8px 0;display:flex;justify-content:space-between;align-items:center;
-    font-size:13px;font-weight:500;color:var(--ink-soft);border-bottom:1px solid var(--line);
-  }
-  .price-cell.best{color:var(--ink);font-weight:700;}
-  .price-cell.best .store-label::before{
-    content:'';display:inline-block;width:5px;height:5px;border-radius:50%;
-    background:var(--purple-2);margin-right:6px;vertical-align:middle;
-  }
-  .price-cell .price-val{font-family:var(--font-archivo),sans-serif;font-weight:700;color:var(--ink-soft);font-variant-numeric:tabular-nums;}
-  .price-cell.best .price-val{color:var(--purple-2);}
-  .price-cell .store-label{color:inherit;}
-
-  .live-card{cursor:default;}
-  .live-sub{font-size:12px;color:var(--ink-soft);margin-top:1px;}
-  .live-chip{
-    margin-top:10px;font-size:11.5px;font-weight:600;color:var(--ink-soft);
-    display:inline-flex;align-items:center;gap:6px;
-  }
-  .live-chip::before{content:'';width:5px;height:5px;border-radius:50%;background:var(--purple-2);}
+  /* (Se sacó el bloque .price-grid/.price-cell/.live-card: era la grilla
+     de precios de la versión vieja de la ficha de producto, reemplazada
+     por .pd-stores-grid.)
 
   /* comparación por súper */
   .compare-sub{font-size:12.5px;color:var(--ink-soft);margin:14px 0 16px;max-width:420px;}
@@ -579,8 +659,8 @@
     border:1px solid var(--line);transition:border-color .2s ease;
   }
   .comp-row.best{border-color:var(--down);}
-  .comp-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;}
-  .comp-store{display:flex;align-items:center;gap:10px;font-size:14px;font-weight:700;}
+  .comp-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;row-gap:6px;column-gap:10px;}
+  .comp-store{display:flex;align-items:center;flex-wrap:wrap;row-gap:4px;gap:8px;font-size:14px;font-weight:700;min-width:0;}
   .store-logo-wrap{display:inline-flex;align-items:center;background:#fff;border-radius:8px;padding:3px 8px;line-height:0;box-shadow:0 0 0 1px rgba(0,0,0,.06);}
   .store-logo-img{display:block;width:auto;object-fit:contain;}
   .store-logo-fallback{font-family:var(--font-archivo),sans-serif;font-weight:700;}
@@ -591,14 +671,14 @@
   }
   .comp-diff{font-size:11.5px;font-weight:600;color:var(--ink-faint);margin-top:8px;display:block;}
   .comp-diff.zero{color:var(--down);font-weight:700;}
-  .comp-top .amt{font-family:var(--font-archivo),sans-serif;font-size:16.5px;font-weight:800;font-variant-numeric:tabular-nums;}
+  .comp-top .amt{font-family:var(--font-archivo),sans-serif;font-size:16.5px;font-weight:800;font-variant-numeric:tabular-nums;flex-shrink:0;margin-left:auto;white-space:nowrap;}
   .comp-track{height:6px;background:var(--surface-2);border-radius:999px;overflow:hidden;}
   .comp-fill{height:100%;border-radius:999px;background:var(--ink-faint);width:0;transition:width .6s cubic-bezier(.2,.8,.2,1);}
   .comp-fill.best{background:var(--down);}
   .comp-fill.worst{background:var(--coral);}
   .best-flag,.worst-flag,.mid-flag{
     font-size:10px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;
-    padding:3px 8px;border-radius:999px;margin-left:6px;white-space:nowrap;
+    padding:3px 8px;border-radius:999px;white-space:nowrap;
   }
   .best-flag{color:var(--down);background:var(--down-wash);}
   .worst-flag{color:var(--up);background:color-mix(in srgb, var(--up) 12%, var(--surface));}
@@ -776,14 +856,10 @@
   .pd-eyebrow{display:flex;align-items:center;gap:7px;font-size:11px;font-weight:700;letter-spacing:.06em;color:var(--ink-soft);}
   .pd-title{font-size:26px;line-height:1.14;margin:2px 0 8px;letter-spacing:-0.035em;}
   .pd-sub{font-size:13px;color:var(--ink-soft);margin-bottom:14px;max-width:520px;line-height:1.5;}
-  .pd-alert-limit-notice, .cat-alert-limit-notice{
-    font-size:12px;font-weight:600;color:var(--purple-3);background:var(--best-bg);
+  .pd-alert-limit-notice{
+    font-size:12px;font-weight:600;color:var(--accent-ink);background:var(--accent-wash);
     border-radius:10px;padding:8px 12px;margin-bottom:12px;line-height:1.4;
   }
-  .cat-alert-limit-notice{margin:0 0 14px;}
-  .pd-crumbs{display:none;}
-  .pd-crumbs .chip{cursor:default;font-size:11.5px;padding:6px 12px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-  .pd-crumb-sep{color:var(--ink-faint);font-size:12px;}
 
   .pd-hero{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg);padding:22px;margin-bottom:30px;box-shadow:var(--shadow-sm);}
   .pd-hero-top{display:flex;gap:18px;align-items:center;}
@@ -1139,16 +1215,21 @@
   min-height:100dvh;display:flex;flex-direction:column;align-items:center;justify-content:center;
   gap:16px;color:var(--ink-soft);font-size:13.5px;
 }
-.loading-cart-wrap{display:flex;flex-direction:column;align-items:center;gap:10px;}
-.loading-cart{color:var(--ink-soft);animation:loadingCartBounce .6s ease-in-out infinite;}
+.loading-cart-wrap{display:flex;flex-direction:column;align-items:center;gap:10px;width:110px;}
+.loading-cart-drive{animation:loadingCartDrive 1.6s ease-in-out infinite;}
+.loading-cart{color:var(--ink-soft);animation:loadingCartBounce .4s ease-in-out infinite;}
 .loading-track{
   width:64px;height:3px;border-radius:2px;
   background-image:repeating-linear-gradient(90deg, var(--line) 0 8px, transparent 8px 16px);
   animation:loadingTrackMove .5s linear infinite;
 }
+@keyframes loadingCartDrive{
+  0%,100%{transform:translateX(-28px);}
+  50%{transform:translateX(28px);}
+}
 @keyframes loadingCartBounce{
   0%,100%{transform:translateY(0);}
-  50%{transform:translateY(-5px);}
+  50%{transform:translateY(-4px);}
 }
 @keyframes loadingTrackMove{
   from{background-position:0 0;}
@@ -1193,23 +1274,11 @@
   border-top:1px solid #372F5C;font-size:11.5px;color:#8579AD;
 }
 
-/* --- CTA escanear código de barras ---
-   antes era un botón rojo con degradé que no pegaba con la paleta
-   verde/dorada de la app; ahora es una card lisa, con un chip de ícono
-   en el verde de marca, en línea con el resto de la estética. */
-.scan-cta{
-  display:flex;align-items:center;gap:12px;width:100%;margin:14px 0 4px;padding:13px 16px;
-  border:1px solid var(--line);border-radius:16px;cursor:pointer;font-family:var(--font-inter),sans-serif;
-  font-size:14px;font-weight:600;color:var(--ink);background:var(--surface);
-  transition:border-color .15s ease, background .15s ease, transform .1s ease;
-}
-.scan-cta:hover{border-color:var(--lime-dark);background:var(--chip-bg);}
-.scan-cta:active{transform:scale(.99);}
-.scan-cta-icon{
-  display:flex;align-items:center;justify-content:center;flex-shrink:0;
-  width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg, var(--purple-1), var(--purple-2));color:#fff;
-}
-.scan-cta-arrow{margin-left:auto;flex-shrink:0;color:var(--ink-faint);}
+/* (Se sacó .scan-cta: el botón grande de "Escaneá un código de barras"
+   que vivía debajo del buscador. Era la tercera puerta al mismo escáner —
+   las otras dos son el botón central de la barra de abajo y el ícono
+   dentro del propio buscador — y se llevaba una franja entera de la
+   portada antes de que se viera un solo producto.) */
 
 /* --- feed de "Ofertas cerca tuyo" --- */
 .deals-feed{margin:18px 0 4px;}
@@ -1415,11 +1484,14 @@
 .premium-status-active{color:var(--down);background:var(--down-wash);}
 
 /* --- respiración general de la portada --- */
-.scan-cta{margin:16px 0 2px;border-radius:var(--r-md);}
-.main-compare-block{margin-top:14px;padding-bottom:40px;}
+.main-compare-block{
+  margin-top:14px;padding-bottom:40px;
+  /* El header es sticky: sin esto, el scrollIntoView de "Comparar ahora"
+     dejaba el título del bloque justo debajo del header, tapado. */
+  scroll-margin-top:118px;
+}
 .compare-sub{font-size:13px;color:var(--ink-soft);margin:10px 0 18px;max-width:440px;line-height:1.5;}
 .savings-chart-track{background:var(--surface-2);}
 .sort-trigger{background:var(--surface);border:1px solid var(--line);border-radius:999px;}
 .empty-state{padding:52px 16px;}
 .skeleton{border-bottom:1px solid var(--line);padding:20px 0;}
-.skeleton .sk-line{background:var(--surface-2);}

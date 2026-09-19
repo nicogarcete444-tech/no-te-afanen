@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { PRECIOS_CLAROS_BASE, PRECIOS_CLAROS_HEADERS } from '@/lib/preciosClarosBase';
+import { PRECIOS_CLAROS_BASE, fetchPreciosClaros } from '@/lib/preciosClarosBase';
 import { getClientIp, isRateLimited, parseLat, parseLimit, parseLng, RATE_LIMITS } from '@/lib/apiSecurity';
+
+// Igual que /api/productos: le da margen al timeout + reintento de
+// fetchPreciosClaros.
+export const maxDuration = 20;
 
 // Igual que /api/productos: corre en el servidor de Vercel para evitar CORS.
 export async function GET(request: NextRequest) {
@@ -19,12 +23,9 @@ export async function GET(request: NextRequest) {
   const url = `${PRECIOS_CLAROS_BASE}/sucursales?lat=${lat}&lng=${lng}&limit=${limit}`;
 
   try {
-    const upstream = await fetch(url, {
-      headers: PRECIOS_CLAROS_HEADERS,
-      // Las sucursales casi no cambian (abre o cierra un local cada tanto),
-      // así que acá sí conviene un caché largo: 24 h.
-      next: { revalidate: 60 * 60 * 24 },
-    });
+    // Las sucursales casi no cambian (abre o cierra un local cada tanto),
+    // así que acá sí conviene un caché largo: 24 h.
+    const upstream = await fetchPreciosClaros(url, 60 * 60 * 24);
 
     if (!upstream.ok) {
       return NextResponse.json(
