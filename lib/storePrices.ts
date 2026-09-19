@@ -17,14 +17,16 @@ export type NearbyStore = {
   sucursalId: string; // id compuesto que Precios Claros ya devuelve armado ("comercioId-banderaId-sucursalId")
 };
 
-// 4 en vez de 8: la comparación (tanto la ficha de un producto puntual como
-// el total del carrito) queda más legible con 4 súpers grandes que con 8
-// mezclando cadenas chicas o regionales sin logo. Como CADENAS_PRIORITARIAS
-// de abajo ya prioriza a las cadenas nacionales (Carrefour, Coto, Jumbo,
-// Disco, Día, ChangoMas), estos 4 lugares terminan siendo, casi siempre,
-// las cadenas grandes que sí hay cerca — y solo se completa con una cadena
-// regional si en la zona no hay 4 nacionales.
-const MAX_CHAINS = 4;
+// 6 en vez de 4: con solo 4 candidatas, apenas una o dos no tenían cargado
+// el precio de un producto puntual en Precios Claros, la comparación
+// quedaba en 2 súpers (o menos) aunque hubiera más cadenas grandes cerca.
+// No inventamos precios para completar — así que la única forma de que la
+// comparación muestre más súpers reales es chequear más candidatas desde
+// el arranque. Como CADENAS_PRIORITARIAS de abajo ya prioriza a las cadenas
+// nacionales (Carrefour, Coto, Jumbo, Disco, Día, ChangoMas), 6 alcanza
+// para cubrirlas casi siempre a todas antes de completar con una cadena
+// regional.
+const MAX_CHAINS = 6;
 
 // Precios Claros no es solo para supermercados: por la Ley de Góndolas
 // también reportan cadenas de electrodomésticos, ferreterías, estaciones de

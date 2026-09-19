@@ -104,13 +104,16 @@ export default function CompareSection({
 }) {
   const { chosenEntries, totals, order, wins, complete } = cartStats(selected, productIndex, stores);
 
-  // Hasta 4 súpers para la comparación visual, con un total ESTIMADO cuando
-  // falta el precio confirmado de algún producto (se completa con el
-  // promedio conocido de ese producto en otras cadenas). Antes esta lista
-  // solo incluía súpers con precio confirmado de TODO el carrito, así que
-  // con unos pocos productos casi siempre quedaba un solo súper (o ninguno)
-  // y no había nada para comparar.
-  const MAX_STORES_SHOWN = 4;
+  // Hasta 6 súpers para la comparación visual (ver MAX_CHAINS en
+  // lib/storePrices.ts: ahora se chequean 6 cadenas cercanas en vez de 4,
+  // así la comparación no se queda en 2 apenas alguna no tenga cargado un
+  // producto puntual), con un total ESTIMADO cuando falta el precio
+  // confirmado de algún producto (se completa con el promedio conocido de
+  // ese producto en otras cadenas). Antes esta lista solo incluía súpers
+  // con precio confirmado de TODO el carrito, así que con unos pocos
+  // productos casi siempre quedaba un solo súper (o ninguno) y no había
+  // nada para comparar.
+  const MAX_STORES_SHOWN = 6;
   const storeTotals = estimatedStoreTotals(chosenEntries, stores).slice(0, MAX_STORES_SHOWN);
   const shownStoreIdx = new Set(storeTotals.map((st) => st.storeIndex));
   const minEstTotal = storeTotals.length ? storeTotals[0].total : 0;

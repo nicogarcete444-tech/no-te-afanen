@@ -1,4 +1,4 @@
-export const CATEGORIES = ['Todos', 'Lácteos', 'Almacén', 'Limpieza', 'Bebidas', 'Perfumería', 'Frescos', 'Verdulería', 'Congelados'];
+export const CATEGORIES = ['Todos', 'Lácteos', 'Almacén', 'Limpieza', 'Bebidas', 'Perfumería', 'Frescos', 'Verdulería', 'Congelados', 'Mascotas'];
 
 export const CATEGORY_COLORS: Record<string, [string, string]> = {
   'Lácteos': ['#7FC4F5', '#2E74C9'],
@@ -9,13 +9,14 @@ export const CATEGORY_COLORS: Record<string, [string, string]> = {
   'Frescos': ['#B7E39A', '#5C9E3A'],
   'Verdulería': ['#A9E06B', '#5B8C1E'],
   'Congelados': ['#9FD8F0', '#2B7FA3'],
+  'Mascotas': ['#D8B48C', '#8B5E34'],
 };
 
-// Vidriera de la página principal (rubro "Todos", sin buscar nada). Son 10
+// Vidriera de la página principal (rubro "Todos", sin buscar nada). Son 11
 // productos bien variados — uno de cada rubro (Lácteos, Almacén, Limpieza,
-// Bebidas, Perfumería, Frescos, Verdulería, Congelados) más dos básicos
-// extra — para que la portada cargue rápido y muestre variedad real sin
-// amontonar. El catálogo completo se sigue usando al elegir un rubro
+// Bebidas, Perfumería, Frescos, Verdulería, Congelados, Mascotas) más dos
+// básicos extra — para que la portada cargue rápido y muestre variedad real
+// sin amontonar. El catálogo completo se sigue usando al elegir un rubro
 // puntual en los chips o al buscar algo.
 export const HOME_TEASER_QUERIES: { category: string; query: string }[] = [
   { category: 'Lácteos', query: 'leche entera' },
@@ -28,10 +29,11 @@ export const HOME_TEASER_QUERIES: { category: string; query: string }[] = [
   { category: 'Frescos', query: 'pollo' },
   { category: 'Verdulería', query: 'tomate' },
   { category: 'Congelados', query: 'hamburguesa congelada' },
+  { category: 'Mascotas', query: 'alimento balanceado para perros' },
 ];
 
 // Cuántos productos se muestran en la vidriera de la página principal.
-export const HOME_TEASER_LIMIT = 10;
+export const HOME_TEASER_LIMIT = 11;
 
 // Ya no hay precios inventados a mano. El "catálogo" completo (al elegir un
 // rubro puntual, o al buscar) también sale de Precios Claros: disparamos estas
@@ -3053,6 +3055,34 @@ export const DEFAULT_CATALOG_QUERIES: { category: string; query: string }[] = [
   { category: 'Frescos', query: 'milanesa de berenjena' },
   { category: 'Frescos', query: 'provoleta para parrilla' },
   { category: 'Frescos', query: 'queso para provoleta' },
+  // Mascotas — rubro nuevo. Empieza con comida de perro y de gato (lo que
+  // más se busca) y suma un puñado de básicos que casi siempre se compran
+  // junto con el alimento, para que el rubro no quede pelado con solo dos
+  // productos.
+  { category: 'Mascotas', query: 'alimento balanceado para perros' },
+  { category: 'Mascotas', query: 'alimento para perros adultos' },
+  { category: 'Mascotas', query: 'alimento para cachorros' },
+  { category: 'Mascotas', query: 'alimento para perros raza pequeña' },
+  { category: 'Mascotas', query: 'alimento para perros raza grande' },
+  { category: 'Mascotas', query: 'alimento para perros senior' },
+  { category: 'Mascotas', query: 'paté para perros' },
+  { category: 'Mascotas', query: 'pouch para perros' },
+  { category: 'Mascotas', query: 'alimento para perros light' },
+  { category: 'Mascotas', query: 'snacks para perros' },
+  { category: 'Mascotas', query: 'huesos para perros' },
+  { category: 'Mascotas', query: 'alimento balanceado para gatos' },
+  { category: 'Mascotas', query: 'alimento para gatos adultos' },
+  { category: 'Mascotas', query: 'alimento para gatitos' },
+  { category: 'Mascotas', query: 'alimento para gatos esterilizados' },
+  { category: 'Mascotas', query: 'alimento para gatos senior' },
+  { category: 'Mascotas', query: 'paté para gatos' },
+  { category: 'Mascotas', query: 'pouch para gatos' },
+  { category: 'Mascotas', query: 'alimento para gatos urinary' },
+  { category: 'Mascotas', query: 'snacks para gatos' },
+  { category: 'Mascotas', query: 'sobres de alimento humedo para gatos' },
+  { category: 'Mascotas', query: 'arena para gatos' },
+  { category: 'Mascotas', query: 'juguete para perros' },
+  { category: 'Mascotas', query: 'juguete para gatos' },
 ];
 
 // Cuántos resultados le pedimos a Precios Claros por cada búsqueda de la

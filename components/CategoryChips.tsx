@@ -152,6 +152,20 @@ function CategoryIcon({ category, active }: { category: string; active: boolean 
         </svg>
       );
 
+    // Huella: pad grande abajo, cuatro dedos arriba en arco. Es la silueta
+    // más reconocible para "mascotas" sin tener que elegir entre perro y
+    // gato (el rubro tiene comida de los dos).
+    case 'Mascotas':
+      return (
+        <svg {...common} aria-hidden="true">
+          <ellipse cx="12" cy="16.3" rx="4.3" ry="3.5" />
+          <circle cx="6.2" cy="10" r="1.9" />
+          <circle cx="10" cy="6.7" r="1.9" />
+          <circle cx="14" cy="6.7" r="1.9" />
+          <circle cx="17.8" cy="10" r="1.9" />
+        </svg>
+      );
+
     default:
       return (
         <svg {...common} aria-hidden="true">

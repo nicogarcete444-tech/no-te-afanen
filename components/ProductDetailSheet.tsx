@@ -225,6 +225,11 @@ export default function ProductDetailSheet({
               RUBRO · {product.category.toUpperCase()}
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              {/* Antes era un botón redondo con solo el ícono de campanita:
+                  el título (tooltip) que explicaba qué hacía no se ve nunca
+                  en celular, así que quedaba un botón sin ninguna pista de
+                  qué tocaba. Ahora lleva texto al lado siempre visible, y el
+                  estado (siguiendo / no) también se lee sin adivinar. */}
               {product.ean && userId && (
                 <button
                   className={`pd-alert-btn${watching ? ' active' : ''}`}
@@ -232,18 +237,20 @@ export default function ProductDetailSheet({
                   disabled={watchBusy}
                   title={watching ? 'Dejar de seguir este precio' : 'Seguir este precio (avisamos si sube o baja)'}
                 >
-                  <svg width="17" height="17" viewBox="0 0 24 24" fill={watching ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill={watching ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M18 8a6 6 0 0 0-12 0c0 4.5-1.5 6-2 7h16c-.5-1-2-2.5-2-7Z" />
                     <path d="M10 20a2 2 0 0 0 4 0" />
                   </svg>
+                  <span>{watching ? 'Siguiendo' : 'Seguir precio'}</span>
                 </button>
               )}
               {product.ean && !userId && (
                 <Link href="/login" className="pd-alert-btn" title="Iniciá sesión para seguir este precio">
-                  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M18 8a6 6 0 0 0-12 0c0 4.5-1.5 6-2 7h16c-.5-1-2-2.5-2-7Z" />
                     <path d="M10 20a2 2 0 0 0 4 0" />
                   </svg>
+                  <span>Seguir precio</span>
                 </Link>
               )}
               <button className="cart-sheet-close" onClick={onClose} aria-label="Cerrar">
