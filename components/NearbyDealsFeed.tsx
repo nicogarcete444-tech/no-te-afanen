@@ -14,7 +14,7 @@ import ProductDetailSheet, { ProductDetailInfo } from './ProductDetailSheet';
 // Misma lógica que CatRowMedia (CategoryProductList.tsx): busca la foto real
 // del producto por EAN y, mientras no hay nada, muestra el monograma de
 // respaldo (iniciales sobre un color) en vez de dejar el hueco vacío.
-function DealMedia({ ean, nombre }: { ean: string; nombre: string }) {
+function DealMedia({ ean, nombre, marca }: { ean: string; nombre: string; marca?: string }) {
   const [url, setUrl] = useState<string | null>(null);
   const [buscando, setBuscando] = useState(true);
 
@@ -42,8 +42,10 @@ function DealMedia({ ean, nombre }: { ean: string; nombre: string }) {
   return (
     <div className={`deal-card-media${buscando ? ' loading' : ' no-photo'}`}>
       {!buscando && (
-        <div className="monogram monogram-lg" data-mi={getMonogramIndex(nombre)}>
-          {getInitials(nombre)}
+        // Las iniciales son las de la marca ("La Serenísima" -> "LS") cuando la
+        // tenemos; si no, las del nombre.
+        <div className="monogram monogram-lg" data-mi={getMonogramIndex(marca || nombre)}>
+          {getInitials(marca || nombre)}
         </div>
       )}
     </div>
@@ -57,6 +59,7 @@ export default function NearbyDealsFeed({
   onToggle,
   userId,
   premium,
+  onEansChange,
 }: {
   // Productos ya traídos (vidriera / catálogo) entre los que buscar ofertas.
   pool: LiveItem[];
@@ -65,6 +68,9 @@ export default function NearbyDealsFeed({
   onToggle: (id: string, product: Product) => void;
   userId: string | null;
   premium: boolean;
+  // Avisa qué códigos de barra tienen una oferta activa ahora, para el filtro
+  // "Bajaron" del catálogo (así no se vuelven a pedir los mismos precios).
+  onEansChange?: (eans: Set<string>) => void;
 }) {
   const [deals, setDeals] = useState<NearbyDeal[]>([]);
   const [loading, setLoading] = useState(false);
@@ -95,6 +101,11 @@ export default function NearbyDealsFeed({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stores, pool.length]);
 
+  useEffect(() => {
+    onEansChange?.(new Set(deals.map((d) => d.ean)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deals]);
+
   function handleToggleCart(priceByStore: Record<string, number>) {
     if (!openProduct) return;
     onToggle(openProduct.id, {
@@ -116,9 +127,6 @@ export default function NearbyDealsFeed({
   return (
     <div className="deals-feed">
       <div className="deals-feed-head">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M12 2l2.4 6.6L21 11l-6.6 2.4L12 20l-2.4-6.6L3 11l6.6-2.4L12 2z" />
-        </svg>
         <h2>Ofertas cerca tuyo</h2>
         <button
           type="button"
@@ -146,7 +154,7 @@ export default function NearbyDealsFeed({
                 }
               >
                 <span className="deal-card-badge">{deal.discountPct}% OFF</span>
-                <DealMedia ean={deal.ean} nombre={deal.nombre} />
+                <DealMedia ean={deal.ean} nombre={deal.nombre} marca={deal.marca} />
                 <StoreLogo chain={deal.chain} size={16} className="deal-card-logo" />
                 {deal.marca && <span className="deal-card-brand">{deal.marca}</span>}
                 <span className="deal-card-name">{deal.nombre}</span>

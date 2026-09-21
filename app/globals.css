@@ -296,6 +296,14 @@
   }
   .theme-toggle:hover{background:var(--surface-2);color:var(--ink);}
   .theme-toggle:active{transform:scale(.92);}
+  .notif-bell{position:relative;}
+  .notif-bell-dot{
+    position:absolute;top:4px;right:4px;min-width:16px;height:16px;padding:0 3px;border-radius:999px;
+    background:var(--up);color:#fff;font-size:10px;font-weight:700;line-height:16px;text-align:center;
+    box-shadow:0 0 0 2px var(--bg);
+  }
+  /* Solo el puntito (invitado que todavía no abrió la campana). */
+  .notif-bell-dot.is-plain{top:9px;right:10px;min-width:0;width:10px;height:10px;padding:0;}
   .cart-badge{
     position:absolute;top:-2px;right:-2px;min-width:17px;height:17px;padding:0 4px;border-radius:999px;
     background:var(--accent);color:#fff;font-size:9.5px;font-weight:800;font-family:var(--font-archivo),sans-serif;
@@ -389,22 +397,24 @@
 
   /* Carrito con productos: el hero cuenta lo que pasa con ESE carrito (qué
      súper conviene) en vez del ahorro del mes. Misma altura que .is-empty. */
-  .savings-card.is-cart{min-height:150px;padding:18px 20px;}
+  .savings-card.is-cart{min-height:208px;padding:22px 22px;}
+  .savings-card.is-cart .savings-label{text-transform:none;letter-spacing:0;font-size:12.5px;font-weight:600;}
   .savings-verdict-title{
-    font-family:var(--font-archivo),sans-serif;font-size:24px;font-weight:800;color:#fff;
-    letter-spacing:-0.03em;line-height:1.08;margin-top:6px;text-wrap:balance;
+    font-family:var(--font-archivo),sans-serif;font-size:28px;font-weight:800;color:#fff;
+    letter-spacing:-0.035em;line-height:1.08;margin-top:6px;
     text-shadow:0 2px 18px rgba(34,24,140,.35);
   }
-  .savings-verdict-title.has-logo{display:flex;flex-direction:column;align-items:flex-start;gap:7px;}
-  .savings-verdict-logo{display:inline-flex;filter:drop-shadow(0 4px 10px rgba(20,12,90,.35));}
-  .savings-card.is-cart .savings-detail{font-size:12px;margin-top:8px;}
-  .savings-card.is-cart .savings-cta{margin-top:12px;padding:8px 13px;font-size:12px;}
+  /* "Hoy conviene" y el nombre del súper, cada uno en su renglón. */
+  .savings-verdict-line{display:block;}
+  .savings-card.is-cart .savings-detail{font-size:13px;margin-top:10px;}
+  .savings-card.is-cart .savings-cta{margin-top:14px;padding:10px 16px;font-size:13px;}
 
   /* search + chips */
   .search-box-wrap{position:relative;}
   .search-box{
     display:flex;align-items:center;gap:11px;background:var(--surface);
-    border:1px solid var(--line);border-radius:var(--r-md);padding:14px 16px;
+    border:1px solid var(--line);border-radius:var(--r-md);padding:10px 10px 10px 16px;
+    min-height:56px;
     box-shadow:var(--shadow-sm);
     transition:border-color .15s ease, box-shadow .15s ease;
   }
@@ -441,12 +451,15 @@
   .clear-btn.show{display:flex;}
   .clear-btn:hover{background:var(--chip-bg);color:var(--ink);}
   .clear-btn:active{transform:scale(.92);}
+  /* El escáner es un cuadrado violeta suave a la derecha del buscador: es la
+     acción distintiva de la caja, y se lee como botón y no como un ícono más. */
   .scan-btn{
-    border:none;background:none;color:var(--ink-soft);width:28px;height:28px;border-radius:50%;
+    border:none;background:var(--accent-wash);color:var(--accent);width:38px;height:38px;border-radius:12px;
     display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;
-    transition:background .15s ease, color .15s ease;
+    transition:background .15s ease, color .15s ease, transform .1s ease;
   }
-  .scan-btn:hover{background:var(--chip-bg);color:var(--ink);}
+  .scan-btn:hover{background:color-mix(in srgb, var(--accent) 16%, var(--surface));}
+  .scan-btn:active{transform:scale(.94);}
 
   /* modal de escaneo de código de barras (pantalla completa, mismo patrón que el carrito) */
   .scan-overlay{
@@ -506,98 +519,10 @@
   .list-header-right{display:flex;align-items:center;gap:10px;margin-left:auto;flex-shrink:0;}
   .list-count{font-size:12px;color:var(--ink-faint);white-space:nowrap;}
 
-  /* Acá vivía el bloque .product-card / .product-media / .select-box /
-     .trend-badge: la tarjeta de producto de una versión anterior del
-     listado. Hoy el catálogo entero se dibuja con .cat-section + .cat-row
-     (ver el bloque de abajo) y ninguna de esas clases quedaba referenciada
-     por un solo componente. Eran ~40 reglas viajando en el CSS de todas
-     las cargas para no pintar nada.
-
-  /* listado agrupado por rubro — card por categoría con filas simples
-     (imagen + nombre + código + precio), estilo "vidriera por rubro". */
-  .cat-section{
-    background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg);
-    padding:20px 14px 14px;margin:16px 0;animation:fadeUp .2s ease both;
-    box-shadow:var(--shadow-sm);
-  }
-  .cat-section-head{display:flex;align-items:center;gap:9px;margin-bottom:6px;padding:0 6px;}
+  /* Puntito de color de cada rubro (lo usa la ficha del producto). El
+     listado del catálogo son tarjetas de producto: ver .pcard más abajo. */
   .cat-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;align-self:center;}
-  .cat-section-name{font-family:var(--font-archivo),sans-serif;font-weight:700;font-size:15px;color:var(--ink);letter-spacing:-0.02em;}
-  .cat-section-count{font-size:12px;color:var(--ink-faint);}
-  .cat-section-list{display:flex;flex-direction:column;}
-  .cat-row{
-    display:flex;align-items:center;gap:13px;padding:13px 8px;margin:0;
-    background:none;border:none;border-bottom:1px solid var(--line);border-radius:0;
-    cursor:pointer;transition:background .12s ease,border-color .12s ease,transform .1s ease;
-  }
-  .cat-row:active{background:var(--surface-2);}
-  .cat-row.last,.cat-row:last-child{border-bottom:none;}
-  .cat-row:hover .cat-row-name{color:var(--accent);}
-  .cat-row.selected{background:var(--accent-wash);border-radius:var(--r-sm);border-bottom-color:transparent;}
-  .cat-row-media{
-    width:54px;height:54px;border-radius:var(--r-sm);flex-shrink:0;
-    display:flex;align-items:center;justify-content:center;
-    overflow:hidden;position:relative;
-  }
-  /* Con foto real: fondo blanco y borde fino, para que la imagen (que suele
-     venir con fondo blanco de Open Food Facts) no salte contra el resto. */
-  .cat-row-media.has-photo{background:#fff;border:1px solid var(--line);}
-  /* Sin foto: monograma de color en vez de un cuadrado gris "roto" que
-     parecía un error en vez de un simple "no hay foto todavía". */
-  .cat-row-media.no-photo{overflow:hidden;}
-  /* Mientras la foto no llegó, un pulso suave en vez de un ícono gris fijo:
-     se entiende que está cargando y no que el producto no tiene imagen. */
-  .cat-row-media.loading{background:var(--surface-2);}
-  .cat-row-media.loading::after{
-    content:'';position:absolute;inset:0;background:var(--surface-2);
-    animation:pulse 1.2s ease infinite;
-  }
-  .cat-row-media img{width:100%;height:100%;object-fit:contain;padding:4px;}
-  .cat-row-info{flex:1;min-width:0;}
-  .cat-row-brand{
-    font-size:10.5px;font-weight:700;color:var(--ink-faint);letter-spacing:.04em;
-    text-transform:uppercase;margin-bottom:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
-  }
-  .cat-row-name{
-    font-family:var(--font-archivo),sans-serif;font-size:14.5px;font-weight:700;color:var(--ink);line-height:1.3;letter-spacing:-0.015em;transition:color .12s ease;
-    overflow:hidden;text-overflow:ellipsis;display:-webkit-box;
-    -webkit-line-clamp:2;-webkit-box-orient:vertical;
-  }
-  .cat-row-meta{
-    font-size:11.5px;color:var(--ink-soft);margin-top:3px;font-variant-numeric:tabular-nums;
-    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
-  }
-  .cat-row-price{
-    display:flex;flex-direction:column;align-items:flex-end;gap:1px;flex-shrink:0;
-    color:var(--ink);padding-left:8px;
-  }
-  .cat-row-price-from{
-    font-size:10px;font-weight:600;color:var(--ink-faint);letter-spacing:.04em;text-transform:uppercase;
-  }
-  .cat-row-price-val{
-    font-family:var(--font-archivo),sans-serif;font-weight:800;font-size:15px;
-    white-space:nowrap;font-variant-numeric:tabular-nums;letter-spacing:-0.02em;
-  }
-  /* Agregar / quitar del carrito directo desde la fila. Acá vivía la
-     campanita de "seguir este producto": un objetivo táctil de 30px, para
-     una acción de nicho, repetida en cada una de las cincuenta filas de un
-     rubro. La campanita se fue a la ficha del producto (donde ya estaba) y
-     el lugar lo ocupa ahora la acción que la gente viene a hacer. */
-  .cat-row-add{
-    width:38px;height:38px;border-radius:50%;flex-shrink:0;margin-left:2px;
-    border:1.5px solid var(--line-strong);background:var(--surface);color:var(--ink-soft);
-    display:flex;align-items:center;justify-content:center;cursor:pointer;
-    transition:background .15s ease,color .15s ease,border-color .15s ease,transform .1s ease;
-  }
-  .cat-row-add:hover{border-color:var(--accent);color:var(--accent);}
-  .cat-row-add:active{transform:scale(.88);}
-  .cat-row-add.in-cart{background:var(--accent);border-color:var(--accent);color:#fff;}
-  .cat-row-add.busy{opacity:.55;cursor:default;}
-  .cat-row-add.busy svg{animation:spin .7s linear infinite;}
   @keyframes spin{to{transform:rotate(360deg);}}
-  .cat-row-price-unit{
-    font-size:10px;color:var(--ink-faint);white-space:nowrap;font-variant-numeric:tabular-nums;
-  }
 
   .empty-state{
     text-align:center;padding:40px 16px;color:var(--ink-soft);font-size:13.5px;
@@ -686,28 +611,9 @@
   .win-chip .dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;}
   .win-chip.zero{opacity:.45;}
   .win-chip strong{color:var(--ink);font-family:var(--font-archivo),sans-serif;}
-  .comp-row{
-    margin-bottom:10px;padding:16px;border-radius:var(--r-md);background:var(--surface);
-    border:1px solid var(--line);transition:border-color .2s ease;
-  }
-  .comp-row.best{border-color:var(--down);}
-  .comp-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;row-gap:6px;column-gap:10px;}
-  .comp-store{display:flex;align-items:center;flex-wrap:wrap;row-gap:4px;gap:8px;font-size:14px;font-weight:700;min-width:0;}
   .store-logo-wrap{display:inline-flex;align-items:center;background:#fff;border-radius:8px;padding:3px 8px;line-height:0;box-shadow:0 0 0 1px rgba(0,0,0,.06);}
   .store-logo-img{display:block;width:auto;object-fit:contain;}
   .store-logo-fallback{font-family:var(--font-archivo),sans-serif;font-weight:700;}
-  .comp-rank{
-    width:22px;height:22px;border-radius:50%;flex-shrink:0;color:#fff;
-    display:flex;align-items:center;justify-content:center;
-    font-size:11px;font-weight:800;font-family:var(--font-archivo),sans-serif;
-  }
-  .comp-diff{font-size:11.5px;font-weight:600;color:var(--ink-faint);margin-top:8px;display:block;}
-  .comp-diff.zero{color:var(--down);font-weight:700;}
-  .comp-top .amt{font-family:var(--font-archivo),sans-serif;font-size:16.5px;font-weight:800;font-variant-numeric:tabular-nums;flex-shrink:0;margin-left:auto;white-space:nowrap;}
-  .comp-track{height:6px;background:var(--surface-2);border-radius:999px;overflow:hidden;}
-  .comp-fill{height:100%;border-radius:999px;background:var(--ink-faint);width:0;transition:width .6s cubic-bezier(.2,.8,.2,1);}
-  .comp-fill.best{background:var(--down);}
-  .comp-fill.worst{background:var(--coral);}
   .best-flag,.worst-flag,.mid-flag{
     font-size:10px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;
     padding:3px 8px;border-radius:999px;white-space:nowrap;
@@ -716,7 +622,6 @@
   .worst-flag{color:var(--up);background:color-mix(in srgb, var(--up) 12%, var(--surface));}
   .mid-flag{color:var(--ink-soft);background:var(--surface-2);}
   .est-flag{color:var(--ink-soft);background:var(--surface-2);}
-  .comp-est-note{font-size:11.5px;font-weight:500;color:var(--ink-faint);}
 
   /* El botón principal es negro, no violeta: con una sola cosa en violeta
      por pantalla, el violeta significa algo. */
@@ -1321,7 +1226,7 @@
 /* --- feed de "Ofertas cerca tuyo" (descuentos activos ahora, en las
    cadenas que hay cerca) --- */
 .deals-feed{margin:18px 0 4px;}
-.deals-feed-head{display:flex;align-items:center;gap:8px;margin-bottom:12px;color:var(--gold);}
+.deals-feed-head{display:flex;align-items:center;gap:8px;margin-bottom:12px;}
 .deals-feed-head h2{font-family:var(--font-archivo),sans-serif;font-size:19px;font-weight:800;letter-spacing:-0.02em;color:var(--ink);flex:1;}
 .deals-feed-see-all{
   border:none;background:none;color:var(--accent);font-size:13px;font-weight:700;
@@ -1333,19 +1238,19 @@
 }
 .deals-feed-scroll::-webkit-scrollbar{display:none;}
 .deal-card{
-  position:relative;flex:0 0 auto;width:148px;display:flex;flex-direction:column;align-items:flex-start;gap:4px;
-  text-align:left;padding:0 12px 12px;border:1px solid var(--line);border-radius:14px;background:var(--surface);
+  position:relative;flex:0 0 auto;width:176px;display:flex;flex-direction:column;align-items:flex-start;gap:4px;
+  text-align:left;padding:12px 12px 14px;border:1px solid var(--line);border-radius:20px;background:var(--surface);
   cursor:pointer;font-family:var(--font-inter),sans-serif;transition:border-color .15s ease,transform .1s ease;
   overflow:hidden;
 }
 .deal-card:hover{border-color:var(--accent-soft);}
 .deal-card:active{transform:scale(.98);}
-.deal-card.skeleton-card{height:150px;background:var(--surface-2);animation:pulse 1.1s ease infinite;border-style:dashed;}
+.deal-card.skeleton-card{height:210px;background:var(--surface-2);animation:pulse 1.1s ease infinite;border-style:dashed;}
 .deal-card-media{
-  width:calc(100% + 24px);margin:0 -12px;height:96px;flex-shrink:0;
+  width:100%;height:92px;flex-shrink:0;border-radius:14px;
   display:flex;align-items:center;justify-content:center;overflow:hidden;position:relative;
 }
-.deal-card-media.has-photo{background:#fff;}
+.deal-card-media.has-photo{background:#fff;box-shadow:inset 0 0 0 1px var(--line);}
 .deal-card-media.no-photo{overflow:hidden;}
 .deal-card-media.loading{background:var(--surface-2);}
 .deal-card-media.loading::after{
@@ -1353,7 +1258,7 @@
 }
 .deal-card-media img{width:100%;height:100%;object-fit:contain;padding:8px;}
 .deal-card-badge{
-  position:absolute;top:8px;right:8px;z-index:1;font-size:10.5px;font-weight:800;color:#fff;background:var(--down);
+  position:absolute;top:20px;right:20px;z-index:1;font-size:10.5px;font-weight:800;color:#fff;background:var(--down);
   padding:2px 7px;border-radius:20px;letter-spacing:.02em;
 }
 .deal-card-logo{margin:8px 0 0;}
@@ -1368,14 +1273,6 @@
 
 /* --- selector de orden (reemplaza el <select> nativo) --- */
 .sort-menu{position:relative;}
-.sort-trigger{
-  display:flex;align-items:center;gap:6px;font-size:11.5px;font-weight:600;color:var(--ink-soft);
-  background:var(--chip-bg);border:1px solid var(--line);border-radius:20px;padding:6px 12px;cursor:pointer;
-  font-family:var(--font-inter),sans-serif;transition:color .15s ease,border-color .15s ease;white-space:nowrap;
-}
-.sort-trigger svg{flex-shrink:0;transition:transform .15s ease;}
-.sort-trigger:hover{color:var(--ink);border-color:var(--ink-faint);}
-.sort-trigger.open .sort-chevron{transform:rotate(180deg);}
 .sort-panel{
   position:absolute;top:calc(100% + 8px);right:0;z-index:20;width:max-content;min-width:190px;
   max-width:calc(100vw - 32px);
@@ -1536,7 +1433,6 @@
 }
 .compare-sub{font-size:13px;color:var(--ink-soft);margin:10px 0 18px;max-width:440px;line-height:1.5;}
 .savings-chart-track{background:var(--surface-2);}
-.sort-trigger{background:var(--surface);border:1px solid var(--line);border-radius:999px;}
 .empty-state{padding:52px 16px;}
 .skeleton{border-bottom:1px solid var(--line);padding:20px 0;}
 
@@ -1596,3 +1492,166 @@
 .mp-xlabels{display:flex;margin-top:8px;}
 .mp-xlabels span{flex:0 0 52px;text-align:center;font-size:13px;color:var(--ink-soft);}
 .mp-xlabels span.sel{color:var(--ink);font-weight:600;}
+
+/* ============================================================
+   "Dónde conviene hoy" + catálogo con tarjetas
+   ============================================================ */
+
+/* --- Dónde conviene hoy (comparación del carrito por súper) --- */
+.main-compare-block{margin-top:30px;padding-bottom:0;scroll-margin-top:118px;}
+.dc-head{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:14px;}
+.dc-head h2{font-family:var(--font-archivo),sans-serif;font-size:22px;font-weight:800;letter-spacing:-0.03em;margin:0;}
+.dc-link{
+  background:none;border:none;padding:4px 2px;cursor:pointer;flex-shrink:0;
+  font-family:var(--font-inter),sans-serif;font-size:14px;font-weight:700;color:var(--accent);
+}
+.dc-link:hover{text-decoration:underline;}
+.dc-card{
+  background:var(--surface);border:1px solid var(--line);border-radius:24px;
+  padding:4px 16px;box-shadow:var(--shadow-md);
+}
+.dc-row{display:flex;align-items:center;gap:14px;padding:14px 0;border-bottom:1px solid var(--line);}
+.dc-row:last-child{border-bottom:none;}
+.dc-logo{
+  width:46px;height:46px;flex-shrink:0;border-radius:14px;background:#fff;border:1px solid var(--line);
+  display:flex;align-items:center;justify-content:center;box-shadow:0 1px 3px rgba(20,20,26,.06);
+}
+.dc-logo .store-logo-wrap{background:none;box-shadow:none;padding:0;border-radius:0;}
+.dc-logo .store-logo-img{max-width:34px;object-fit:contain;}
+.dc-logo-letter{font-family:var(--font-archivo),sans-serif;font-weight:800;font-size:17px;color:#6B6B78;}
+.dc-mid{flex:1;min-width:0;}
+.dc-name-line{display:flex;align-items:center;gap:8px;min-height:26px;margin-bottom:6px;}
+.dc-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:16px;font-weight:600;color:var(--ink);}
+.dc-best{
+  flex-shrink:0;font-size:13px;font-weight:700;color:var(--down);background:var(--down-wash);
+  padding:4px 12px;border-radius:999px;white-space:nowrap;
+}
+.dc-est{
+  flex-shrink:0;font-size:11px;font-weight:600;color:var(--ink-soft);background:var(--surface-2);
+  padding:3px 9px;border-radius:999px;white-space:nowrap;
+}
+.dc-track{height:10px;background:var(--surface-2);border-radius:999px;overflow:hidden;}
+.dc-fill{height:100%;border-radius:999px;background:var(--line-strong);transition:width .6s cubic-bezier(.2,.8,.2,1);animation:dcGrow .7s cubic-bezier(.2,.8,.2,1) both;}
+@keyframes dcGrow{from{width:0;}}
+.dc-fill.best{background:var(--down);}
+.dc-amt{display:flex;flex-direction:column;align-items:flex-end;flex-shrink:0;min-width:84px;}
+.dc-amt-total{
+  font-family:var(--font-archivo),sans-serif;font-weight:800;font-size:17px;letter-spacing:-0.02em;
+  color:var(--ink);font-variant-numeric:tabular-nums;white-space:nowrap;
+}
+.dc-amt-diff{font-size:13px;color:var(--ink-faint);font-variant-numeric:tabular-nums;margin-top:2px;white-space:nowrap;}
+.dc-meta{
+  display:flex;align-items:center;justify-content:space-between;gap:12px;
+  margin:12px 4px 0;font-size:13px;color:var(--ink-faint);
+}
+.dc-include{
+  margin-top:14px;padding:18px 16px;background:var(--surface);border:1px solid var(--line);
+  border-radius:20px;animation:fadeUp .18s ease both;
+}
+.dc-include-title{font-family:var(--font-archivo),sans-serif;font-weight:800;font-size:15px;letter-spacing:-0.02em;margin-bottom:8px;}
+.dc-include-text{font-size:13px;line-height:1.5;color:var(--ink-soft);margin:0 0 14px;}
+.dc-include .wins-row{margin:0 0 6px;}
+.dc-include-list{display:flex;flex-direction:column;margin-top:8px;}
+.dc-include-item{
+  display:flex;justify-content:space-between;align-items:baseline;gap:14px;
+  padding:9px 0;border-top:1px solid var(--line);font-size:13px;
+}
+.dc-include-item-name{min-width:0;color:var(--ink);overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;}
+.dc-include-item-price{flex-shrink:0;color:var(--ink-soft);font-variant-numeric:tabular-nums;text-align:right;}
+.dc-include .price-freshness{margin:14px 0 0;}
+.dc-include .copy-list-block{margin-top:18px;}
+
+/* --- Catálogo: encabezado y fila de filtros --- */
+.list-header.catalog-head{margin:26px 0 14px;align-items:baseline;}
+.list-header.catalog-head h2{font-family:var(--font-archivo),sans-serif;font-size:22px;font-weight:800;letter-spacing:-0.03em;}
+.list-header.catalog-head .list-count{font-size:14px;}
+.filter-row{
+  display:flex;gap:10px;overflow-x:auto;padding:2px 2px 14px;
+  scrollbar-width:none;-webkit-overflow-scrolling:touch;
+}
+.filter-row::-webkit-scrollbar{display:none;}
+.filter-pill{
+  flex-shrink:0;display:inline-flex;align-items:center;gap:8px;height:44px;padding:0 20px;
+  border-radius:999px;background:var(--surface);border:1px solid var(--line);color:var(--ink);
+  font-family:var(--font-inter),sans-serif;font-size:15px;font-weight:600;white-space:nowrap;cursor:pointer;
+  box-shadow:var(--shadow-sm);transition:background .15s ease,color .15s ease,border-color .15s ease,transform .1s ease;
+}
+.filter-pill:active{transform:scale(.97);}
+.filter-pill svg{flex-shrink:0;color:var(--ink-soft);}
+.filter-pill.active{background:var(--ink);border-color:var(--ink);color:var(--bg);}
+.filter-pill.active svg{color:var(--bg);}
+.sort-menu{flex-shrink:0;}
+.sort-pill.has-value{border-color:var(--accent);color:var(--accent);}
+.sort-pill.has-value svg{color:var(--accent);}
+/* El panel del orden es fixed (la fila de filtros scrollea y lo cortaría). */
+.sort-panel{position:fixed;left:auto;z-index:60;}
+
+/* --- Tarjeta de producto --- */
+.pcard-list{display:flex;flex-direction:column;gap:14px;}
+.pcard{
+  background:var(--surface);border:1px solid var(--line);border-radius:24px;padding:16px;
+  box-shadow:var(--shadow-sm);cursor:pointer;animation:fadeUp .2s ease both;
+  transition:border-color .15s ease,box-shadow .15s ease;
+}
+.pcard:focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
+.pcard.selected{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent),var(--shadow-sm);}
+.pcard-top{display:flex;align-items:center;gap:14px;}
+.pcard-media{
+  width:64px;height:64px;border-radius:18px;flex-shrink:0;overflow:hidden;position:relative;
+  display:flex;align-items:center;justify-content:center;
+}
+.pcard-media.has-photo{background:#fff;border:1px solid var(--line);}
+.pcard-media img{width:100%;height:100%;object-fit:contain;padding:5px;}
+.pcard-media.loading{background:var(--surface-2);}
+.pcard-media.loading::after{content:'';position:absolute;inset:0;background:var(--surface-2);animation:pulse 1.2s ease infinite;}
+.monogram-md{font-size:21px;}
+.pcard-info{flex:1;min-width:0;}
+.pcard-name{
+  font-family:var(--font-archivo),sans-serif;font-size:16.5px;font-weight:700;line-height:1.25;letter-spacing:-0.02em;
+  color:var(--ink);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;
+}
+.pcard-sub{font-size:13.5px;color:var(--ink-soft);margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.pcard-bell{
+  width:46px;height:46px;border-radius:50%;flex-shrink:0;border:none;cursor:pointer;
+  background:var(--accent-wash);color:var(--accent);display:flex;align-items:center;justify-content:center;
+  transition:background .15s ease,color .15s ease,transform .1s ease;
+}
+.pcard-bell:active{transform:scale(.92);}
+.pcard-bell.on{background:var(--accent);color:#fff;}
+.pcard-tiles{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:16px;}
+.pcard-tile{
+  display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:9px;
+  min-height:104px;padding:14px 6px 12px;border-radius:18px;text-align:center;
+  background:var(--surface);border:1px solid var(--line);
+}
+.pcard-tile.best{background:var(--down-wash);border-color:color-mix(in srgb,var(--down) 22%,transparent);}
+.pcard-tile-logo{display:flex;align-items:center;justify-content:center;height:28px;max-width:100%;}
+.pcard-tile .store-logo-img{max-width:44px;object-fit:contain;}
+.pcard-tile-name{font-family:var(--font-archivo),sans-serif;font-weight:700;font-size:13px;color:var(--ink-soft);}
+.pcard-tile-price{
+  font-family:var(--font-archivo),sans-serif;font-weight:800;font-size:17px;letter-spacing:-0.02em;
+  color:var(--ink);font-variant-numeric:tabular-nums;
+}
+.pcard-tile.best .pcard-tile-price{color:var(--down);}
+.pcard-tile-flag{font-size:12.5px;font-weight:700;color:var(--down);margin-top:-4px;}
+.pcard-tile.skeleton{background:var(--surface-2);border-color:transparent;animation:pulse 1.1s ease infinite;}
+.pcard-from{margin-top:14px;font-size:13.5px;color:var(--ink-soft);}
+.pcard-from strong{color:var(--ink);font-weight:700;}
+.pcard-foot{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:14px;min-height:46px;}
+.pcard-save{flex:1;min-width:0;font-size:13.5px;color:var(--ink-soft);}
+.pcard-save strong{color:var(--down);font-weight:700;}
+.pcard-add{
+  flex-shrink:0;height:46px;padding:0 24px;border-radius:14px;border:none;cursor:pointer;
+  background:var(--accent);color:#fff;font-family:var(--font-archivo),sans-serif;font-size:15px;font-weight:700;
+  transition:background .15s ease,color .15s ease,transform .1s ease,opacity .15s ease;
+}
+.pcard-add:active{transform:scale(.96);}
+.pcard-add.in-cart{background:var(--accent-wash);color:var(--accent);}
+.pcard-add.busy{opacity:.6;cursor:default;}
+.pcard-notice{
+  position:fixed;left:16px;right:16px;bottom:108px;z-index:60;max-width:560px;margin:0 auto;
+  display:flex;align-items:center;justify-content:space-between;gap:14px;
+  background:var(--ink);color:var(--bg);border-radius:16px;padding:13px 16px;font-size:13.5px;line-height:1.35;
+  box-shadow:0 12px 28px rgba(0,0,0,.25);animation:fadeUp .18s ease both;
+}
+.pcard-notice-cta{color:var(--bg);font-weight:700;text-decoration:underline;white-space:nowrap;}

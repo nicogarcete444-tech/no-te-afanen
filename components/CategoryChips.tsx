@@ -72,6 +72,16 @@ function CategoryIcon({ category, active }: { category: string; active: boolean 
         </svg>
       );
 
+    // Bife de chorizo con el hueso en T. Con un círculo adentro en vez de la T
+    // se leía como un ojo; la T es lo que dice "corte de carne".
+    case 'Carnes':
+      return (
+        <svg {...common} aria-hidden="true">
+          <path d="M4.4 11.6c0-3.6 3.3-6.1 7.6-6.1 4.4 0 7.6 2.3 7.6 5.6 0 4.5-3.7 7.5-8.4 7.5-4.2 0-6.8-2.6-6.8-7Z" />
+          <path d="M8.6 10.4h6.8M12 10.4v5.4" />
+        </svg>
+      );
+
     // Gatillo de limpiador, ahora rociando. La botella sola no alcanzaba: sin
     // las gotitas saliendo del pico se leía como "un envase más" y no como el
     // acto de limpiar. Las tres gotitas son lo que convierte el dibujo en un

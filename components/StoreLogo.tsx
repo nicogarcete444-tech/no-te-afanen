@@ -13,7 +13,7 @@
 // propio aspect ratio.
 const LOGO_MATCHERS: { test: (n: string) => boolean; src: string; alt: string; intrinsicWidth: number; intrinsicHeight: number }[] = [
   { test: (n) => n.includes('carrefour'), src: '/logos/carrefour.webp', alt: 'Carrefour', intrinsicWidth: 317, intrinsicHeight: 180 },
-  { test: (n) => n.includes('changomas') || n.includes('chango mas'), src: '/logos/changomas.webp', alt: 'Changomas', intrinsicWidth: 180, intrinsicHeight: 180 },
+  { test: (n) => n.includes('changomas') || n.includes('chango mas'), src: '/logos/changomas.webp', alt: 'Changomás', intrinsicWidth: 180, intrinsicHeight: 180 },
   { test: (n) => n.includes('disco'), src: '/logos/disco.webp', alt: 'Disco', intrinsicWidth: 180, intrinsicHeight: 180 },
   { test: (n) => n.includes('jumbo'), src: '/logos/jumbo.webp', alt: 'Jumbo', intrinsicWidth: 180, intrinsicHeight: 180 },
   { test: (n) => n.includes('coto'), src: '/logos/coto.webp', alt: 'Coto', intrinsicWidth: 539, intrinsicHeight: 180 },
@@ -29,6 +29,12 @@ export function getStoreLogo(
   return match
     ? { src: match.src, alt: match.alt, intrinsicWidth: match.intrinsicWidth, intrinsicHeight: match.intrinsicHeight }
     : null;
+}
+
+// Nombre para mostrar de una cadena: "Supermercados DIA" -> "Día", "Chango
+// Mas" -> "Changomás". Si no la reconocemos, el nombre tal cual vino.
+export function chainLabel(chain: string): string {
+  return getStoreLogo(chain)?.alt ?? chain;
 }
 
 export default function StoreLogo({

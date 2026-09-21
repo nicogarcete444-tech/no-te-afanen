@@ -1,3 +1,37 @@
+# Cambios de esta tanda (comparación y catálogo según captura)
+
+- **"Dónde conviene hoy"** (`components/CompareSection.tsx`, `components/StoreApp.tsx`, `app/globals.css`): la comparación del carrito por súper subió de abajo de todo a justo arriba del catálogo. Una tarjeta con una fila por súper (logo en cuadradito, nombre, barra, total y "+$X" contra el más barato; el más barato lleva "Más barato" en verde). Título con "Editar" (abre el carrito). Abajo, "Actualizado hoy, 08:40" (hora real del precio más viejo del carrito) y "Qué incluye".
+  - **"Qué incluye"** despliega: qué suma la comparación y cuándo un total es "Estimado", quién gana cada producto, el mejor precio por producto, "Actualizar", y los botones **"Copiar lista y sumar a mi ahorro del mes"**, WhatsApp y tarjeta premium. Esos botones antes estaban siempre a la vista debajo de la comparación; ahora viven acá.
+  - Con el carrito vacío sigue el aviso de siempre (o el gráfico global si hay datos). Los estados del plan free ("Comparar ahora" / "Ya usaste tus 3 comparaciones") no cambiaron.
+  - Se arregló que las barras podían quedar vacías si el desglose se desbloqueaba sin que cambiaran los totales (el ancho ahora va inline con animación CSS).
+  - Nombres para mostrar: "Día", "Changomás" (`chainLabel` en `components/StoreLogo.tsx`; también lo usa el hero).
+- **Catálogo** (`components/StoreApp.tsx`, `components/CatalogFilters.tsx`, `components/SortMenu.tsx`): "Catálogo" con el contador a la derecha ("1.284 productos", con puntos de miles) y debajo una fila de píldoras: **Todos · Bajaron · un rubro por cada uno que hay cargado · Filtro**.
+  - Las píldoras filtran lo que ya está en pantalla, sin pedir nada nuevo. Los rubros redondos de arriba siguen trayendo más productos de cada rubro.
+  - **Bajaron** = productos con un descuento activo ahora (los mismos que detecta "Ofertas cerca tuyo", vía `onEansChange`). No mira historial de bajas de precio.
+  - **Filtro** es el orden por precio de antes, ahora como última píldora. Su panel es `position: fixed` (la fila scrollea y lo cortaría) y se abre hacia arriba si abajo no entra.
+  - Cambiar de rubro o de búsqueda vuelve a "Todos".
+- **Tarjeta de producto** (`components/ProductCard.tsx`, `components/CategoryProductList.tsx`, `lib/textCase.ts`): reemplaza las filas por rubro. Foto (o iniciales de la MARCA), nombre, "Marca · presentación", campanita, los 3 súpers más baratos (el primero en verde con "Más barato"), "Ahorrás $X vs [súper más caro]" y "Agregar" / "En tu carrito".
+  - Los precios por súper se piden cuando la tarjeta está por entrar en pantalla (IntersectionObserver), máximo 3 pedidos a la vez, y comparten el caché con la ficha y con el feed de ofertas (`fetchStorePriceDetails`). Sin precios por cadena (o sin súpers cerca) muestra "Desde $X en el país", como antes.
+  - Lista plana, sin encabezado por rubro (se conserva el orden por rubro).
+  - Nombres y marcas en MAYÚSCULAS se pasan a "Tipo Título" (`niceCase`); lo que ya viene en minúsculas no se toca.
+  - **Campanita**: sin cuenta muestra un aviso con "Crear cuenta"; con cuenta prende/apaga el seguimiento (mismo tope de 5 alertas del plan free que la ficha).
+  - Tocar la tarjeta sigue abriendo la ficha del producto.
+- **Ofertas cerca tuyo** (`components/NearbyDealsFeed.tsx`): las iniciales del recuadro son las de la marca ("LS"), como en la captura.
+- **CSS**: se sacó el de la lista por rubro (`.cat-section`, `.cat-row*`), el de la comparación vieja (`.comp-*`) y el de `.sort-trigger`, que ya no se usan. Los estilos nuevos (`.dc-*`, `.filter-*`, `.pcard-*`) están al final de `app/globals.css`.
+
+---
+
+# Cambios de esta tanda (rediseño según captura)
+
+- **Campana en el header** (`components/Header.tsx`, `app/globals.css`): ahora se ve también sin cuenta, al lado del ícono de perfil. El punto rojo aparece hasta que el invitado la toca una vez (queda guardado en el celular, clave `nta-bell-seen`). Al tocarla, el invitado ve "Avisos de precio" con un botón para crear cuenta; con cuenta sigue todo igual ("Productos que sigo", avisos push). El contador de no leídos pasó de violeta a rojo.
+- **Buscador** (`components/SearchBox.tsx`, `app/globals.css`): placeholder "Buscar leche, yerba, fideos" y el escáner de códigos de barras dentro de un cuadrado violeta suave a la derecha. La caja quedó un poco más alta.
+- **Hero con carrito** (`components/SavingsCard.tsx`, `app/globals.css`): más alto, con el título grande en dos renglones: "Hoy conviene" y abajo el nombre del súper **en texto** (antes iba el logo). "Tu canasta de N productos" ya no va en mayúsculas espaciadas. El hero sin carrito no cambió.
+- **Nuevo rubro "Carnes"** (`lib/products.ts`, `components/CategoryChips.tsx`): chip con bife en T, entre Almacén y Limpieza. Las búsquedas de carne vacuna, cerdo, pollo, pescados/mariscos, achuras y embutidos frescos (chorizo, morcilla, salchichas…) salen de Frescos y pasan a Carnes; Frescos se queda con fiambres, quesos, pastas frescas y fruta suelta. El reparto se hace por el texto de cada búsqueda (`NO_ES_CARNE` / `ES_CARNE` en `lib/products.ts`). Carnes tiene sus propias 12 búsquedas fijas (`CATALOG_PINNED`) y color propio. En la portada, el producto de muestra "pollo" ahora es de Carnes. Los carritos guardados con categoría "Frescos" no se rompen.
+- **Orden de la portada** (`components/StoreApp.tsx`): buscador → aviso de cuenta → hero → **rubros** → **Ofertas cerca tuyo** → catálogo. Antes las ofertas iban arriba de los rubros.
+- **"Bajaron esta semana" → "Ofertas cerca tuyo"** (`components/NearbyDealsFeed.tsx`): mismo nombre que ya usaba la política de privacidad. Se sacó el ícono de tendencia que tenía adelante. Tarjetas más anchas (176 px) con la foto (o las iniciales) en un recuadro redondeado adentro de la tarjeta, en vez de pegada a los bordes.
+
+---
+
 # Cambios de esta tanda
 
 - **Hero con carrito** (`components/SavingsCard.tsx`, `components/StoreApp.tsx`, `app/globals.css`): con el carrito vacío queda igual que siempre (ahorro del mes). Apenas hay productos en el carrito pasa a "Hoy conviene [logo del súper]" + cuánto se paga menos que en el súper más caro. Usa el mismo cálculo y el mismo orden que "Comparación por súper" (`estimatedStoreTotals`), así nunca se contradicen. En el plan free, hasta que se toca "Comparar ahora" no muestra el veredicto (es lo que ese botón desbloquea); el botón del hero hace lo mismo que el de la sección de comparación.

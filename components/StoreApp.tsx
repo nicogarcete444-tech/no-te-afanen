@@ -7,6 +7,7 @@ import { loadCart, saveCart, StoredCart } from '@/lib/cart';
 import { createClient } from '@/lib/supabase/client';
 import { CartMap, Product } from '@/lib/types';
 import {
+  CATEGORIES,
   CATALOG_BROWSE_DISABLED,
   CATALOG_RESULTS_PER_QUERY,
   HOME_TEASER_QUERIES,
@@ -29,7 +30,7 @@ import CategoryChips from './CategoryChips';
 import { extractEan, groupLiveItems, LiveItem, normalizeEan, SortOrder } from '@/lib/liveItems';
 import { getProductImageUrl, getProductNameByEan, photoLookupName, resolveSearchableName } from '@/lib/productImage';
 import CategoryProductList from './CategoryProductList';
-import SortMenu from './SortMenu';
+import CatalogFilters from './CatalogFilters';
 import { fetchNearbyStores, NearbyStore } from '@/lib/storePrices';
 import { formatCacheAge, loadCatalogCache, saveCatalogCache } from '@/lib/catalogCache';
 import CompareSection from './CompareSection';
@@ -235,6 +236,11 @@ export default function StoreApp({
 
   // Orden de los resultados por precio (catálogo y búsqueda en vivo).
   const [sortOrder, setSortOrder] = useState<SortOrder>('relevancia');
+  // Fila de filtros de abajo de "Catálogo": 'todos', 'bajaron' o un rubro.
+  const [catalogFilter, setCatalogFilter] = useState('todos');
+  // Códigos de barra con una oferta activa ahora (los avisa el feed de
+  // "Ofertas cerca tuyo"): es lo que muestra el filtro "Bajaron".
+  const [dealEans, setDealEans] = useState<Set<string>>(new Set());
 
   // Vidriera inicial (sin buscar nada): también sale de Precios Claros, no
   // de datos inventados. Se arma con varias búsquedas fijas por rubro.
@@ -770,6 +776,30 @@ export default function StoreApp({
     [catalogItems, activeCategory, searchTerm]
   );
 
+  // Cambiar de rubro o de búsqueda arranca de nuevo en "Todos".
+  useEffect(() => {
+    setCatalogFilter('todos');
+  }, [activeCategory, searchTerm]);
+
+  // Rubros que hay en lo que está cargado (para las píldoras de filtro). Con
+  // un rubro elegido arriba hay uno solo y las píldoras sobran.
+  const filterCategories = useMemo(() => {
+    if (activeCategory !== 'Todos') return [] as string[];
+    const present = new Set(filteredCatalog.map((item) => item._cat).filter((c): c is string => !!c));
+    return CATEGORIES.filter((c) => c !== 'Todos' && present.has(c));
+  }, [filteredCatalog, activeCategory]);
+
+  const visibleCatalog = useMemo(() => {
+    if (catalogFilter === 'todos') return filteredCatalog;
+    if (catalogFilter === 'bajaron') {
+      return filteredCatalog.filter((item) => {
+        const ean = extractEan(item);
+        return !!ean && dealEans.has(ean);
+      });
+    }
+    return filteredCatalog.filter((item) => item._cat === catalogFilter);
+  }, [filteredCatalog, catalogFilter, dealEans]);
+
   // diccionario único id -> producto, con los productos que el usuario fue
   // agregando al carrito (todos vienen de Precios Claros, catálogo o búsqueda).
   const productIndex = liveProducts;
@@ -1066,6 +1096,10 @@ export default function StoreApp({
             escáner que ya tienen el botón central de la barra de abajo y el
             propio buscador, y se comía una franja entera de la portada
             antes de que se viera un solo producto. */}
+        <CategoryChips active={activeCategory} onSelect={setActiveCategory} />
+
+        {/* Los rubros van justo debajo del hero y las ofertas después: se
+            elige el rubro primero y recién ahí se ven las promos. */}
         {!liveMode && (
           <NearbyDealsFeed
             pool={catalogItems}
@@ -1074,22 +1108,46 @@ export default function StoreApp({
             onToggle={toggleLiveProduct}
             userId={userId}
             premium={premium}
+            onEansChange={setDealEans}
           />
         )}
 
-        <CategoryChips active={activeCategory} onSelect={setActiveCategory} />
+        {/* "Dónde conviene hoy": la comparación del carrito por súper. Subió
+            de abajo de todo a justo arriba del catálogo, que es lo primero
+            que se mira después del hero. */}
+        <CompareSection
+          selected={selected}
+          productIndex={productIndex}
+          stores={storeNames}
+          userId={userId}
+          premium={premium}
+          onSavingLogged={() => setSavingsRefreshKey((k) => k + 1)}
+          revealed={compareRevealedEffective}
+          remaining={compareRemaining}
+          onReveal={handleCompareNow}
+          pricesAgeLabel={pricesAgeLabel}
+          pricesAt={pricesAge}
+          refreshing={refreshingPrices}
+          onRefreshPrices={() => refreshPricesNow(true)}
+          onEdit={() => setCartOpen(true)}
+        />
 
-        <div className="list-header" id="catalogo">
+        <div className="list-header catalog-head" id="catalogo">
           <h2>{liveMode ? 'Resultados' : 'Catálogo'}</h2>
-          <div className="list-header-right">
-            <SortMenu value={sortOrder} onChange={setSortOrder} />
-            <div className="list-count">
-              {liveMode || catalogLoading || (!searchTerm && CATALOG_BROWSE_DISABLED.includes(activeCategory))
-                ? ''
-                : `${filteredCatalog.length} producto${filteredCatalog.length === 1 ? '' : 's'}`}
-            </div>
+          <div className="list-count">
+            {liveMode || catalogLoading || (!searchTerm && CATALOG_BROWSE_DISABLED.includes(activeCategory))
+              ? ''
+              : `${visibleCatalog.length.toLocaleString('es-AR')} producto${visibleCatalog.length === 1 ? '' : 's'}`}
           </div>
         </div>
+        <CatalogFilters
+          active={liveMode ? 'todos' : catalogFilter}
+          onChange={setCatalogFilter}
+          categories={liveMode ? [] : filterCategories}
+          showDrops={!liveMode}
+          sortOrder={sortOrder}
+          onSortChange={setSortOrder}
+        />
         {liveMode && <div style={{ fontSize: 12, color: 'var(--ink-soft)', marginBottom: 10 }}>{liveStatus}</div>}
         {!liveMode && catalogStatus && (catalogLoading || filteredCatalog.length > 0) && (
           <div style={{ fontSize: 12, color: 'var(--ink-soft)', marginBottom: 10 }}>{catalogStatus}</div>
@@ -1148,9 +1206,20 @@ export default function StoreApp({
                 </button>
               )}
             </div>
+          ) : visibleCatalog.length === 0 ? (
+            <div className="empty-state">
+              <div>
+                {catalogFilter === 'bajaron'
+                  ? 'Ahora no hay productos con descuento entre los que cargamos. Volvé a mirar más tarde.'
+                  : 'No hay productos en esta selección.'}
+              </div>
+              <button className="cta-btn secondary" onClick={() => setCatalogFilter('todos')}>
+                Ver todos
+              </button>
+            </div>
           ) : (
             <CategoryProductList
-              items={filteredCatalog}
+              items={visibleCatalog}
               stores={nearbyStores}
               selected={selected}
               onToggle={toggleLiveProduct}
@@ -1174,20 +1243,6 @@ export default function StoreApp({
           )}
         </div>
 
-        <CompareSection
-          selected={selected}
-          productIndex={productIndex}
-          stores={storeNames}
-          userId={userId}
-          premium={premium}
-          onSavingLogged={() => setSavingsRefreshKey((k) => k + 1)}
-          revealed={compareRevealedEffective}
-          remaining={compareRemaining}
-          onReveal={handleCompareNow}
-          pricesAgeLabel={pricesAgeLabel}
-          refreshing={refreshingPrices}
-          onRefreshPrices={() => refreshPricesNow(true)}
-        />
       </div>
 
       <Footer />

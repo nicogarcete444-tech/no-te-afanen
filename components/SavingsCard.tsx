@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { fmt } from '@/lib/products';
-import StoreLogo, { getStoreLogo } from './StoreLogo';
+import { chainLabel } from './StoreLogo';
 
 // La tarjeta de ahorro: el hero de la portada.
 //
@@ -40,9 +40,7 @@ export type CartHero = {
   onCta: () => void;
 };
 
-function shortChain(chain: string): string {
-  return getStoreLogo(chain)?.alt ?? chain;
-}
+const shortChain = chainLabel;
 
 function CartHeroCard({ cart }: { cart: CartHero }) {
   const { count, revealed, verdict, onCta } = cart;
@@ -52,7 +50,6 @@ function CartHeroCard({ cart }: { cart: CartHero }) {
   let detail: string;
   const single = !!verdict && verdict.worstChain === null;
   const tie = !!verdict && !single && verdict.diff <= 0;
-  const showVerdict = revealed && !!verdict && !tie;
 
   if (!revealed) {
     title = 'Tu carrito está listo';
@@ -64,12 +61,12 @@ function CartHeroCard({ cart }: { cart: CartHero }) {
     title = 'Precios parejos';
     detail = 'Tu carrito sale lo mismo en las cadenas cercanas.';
   } else {
+    // El nombre del súper va en texto grande, en una segunda línea. Antes iba
+    // el logo: sobre el violeta del hero se leía menos que el nombre.
     title = (
       <>
-        Hoy conviene
-        <span className="savings-verdict-logo">
-          <StoreLogo chain={verdict.chain} size={24} />
-        </span>
+        <span className="savings-verdict-line">Hoy conviene</span>
+        <span className="savings-verdict-line">{shortChain(verdict.chain)}</span>
       </>
     );
     detail = single
@@ -81,7 +78,7 @@ function CartHeroCard({ cart }: { cart: CartHero }) {
     <div className="savings-card is-cart">
       <div className="savings-copy">
         <div className="savings-label">{label}</div>
-        <div className={`savings-verdict-title${showVerdict ? ' has-logo' : ''}`}>{title}</div>
+        <div className="savings-verdict-title">{title}</div>
         <div className="savings-detail">{detail}</div>
       </div>
 

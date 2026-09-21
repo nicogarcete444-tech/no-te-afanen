@@ -57,6 +57,10 @@ export default function Header({
   const [accountOpen, setAccountOpen] = useState(false);
   const accountRef = useRef<HTMLDivElement>(null);
   const [notifOpen, setNotifOpen] = useState(false);
+  // Invitado: la campana se ve igual, con el puntito rojo hasta que la toca
+  // una vez (se guarda en este celular). Arranca en "visto" para no
+  // parpadear en el render del servidor.
+  const [guestBellSeen, setGuestBellSeen] = useState(true);
   const [notifications, setNotifications] = useState<PriceDropNotification[]>([]);
   const notifRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
@@ -118,9 +122,26 @@ export default function Header({
 
   const unreadCount = notifications.filter((n) => !n.read).length;
 
+  useEffect(() => {
+    if (userId) return;
+    try {
+      setGuestBellSeen(localStorage.getItem('nta-bell-seen') === '1');
+    } catch {
+      setGuestBellSeen(false);
+    }
+  }, [userId]);
+
   function handleOpenNotifications() {
     setAccountOpen(false);
     setNotifOpen(true);
+    if (!userId) {
+      setGuestBellSeen(true);
+      try {
+        localStorage.setItem('nta-bell-seen', '1');
+      } catch {
+        // sin storage: el puntito vuelve en la próxima visita, no pasa nada
+      }
+    }
     if (userId && unreadCount > 0) {
       setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
       markNotificationsRead(userId);
@@ -198,18 +219,40 @@ export default function Header({
           </div>
         </div>
         <div className="head-actions">
-          {userId && (
-            // Ya no hay campana en el header: las bajadas de precio se
-            // abren desde el menú de cuenta (fila "Productos que sigo", al
-            // lado de "Mis ahorros" y "Hacerme Premium"). Este div solo
-            // sirve de referencia para detectar clicks afuera y anclar el
-            // panel — no tiene botón propio.
-            <div className="account-menu" ref={notifRef}>
+          {/* La campana ya no es solo para cuentas: el invitado también la ve
+              (y adentro se le invita a crear cuenta para seguir productos). */}
+          <div className="account-menu" ref={notifRef}>
+              <button
+                className="theme-toggle notif-bell"
+                aria-label="Notificaciones"
+                onClick={() => (notifOpen ? setNotifOpen(false) : handleOpenNotifications())}
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
+                  <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+                </svg>
+                {userId && unreadCount > 0 && <span className="notif-bell-dot">{unreadCount}</span>}
+                {!userId && !guestBellSeen && <span className="notif-bell-dot is-plain" aria-hidden="true" />}
+              </button>
               {notifOpen && (
                 <>
                 <div className="account-backdrop" onClick={() => setNotifOpen(false)} />
                 <div className="account-panel notif-panel" role="menu">
                   <div className="account-panel-grip" />
+                  {!userId ? (
+                    <>
+                      <div className="notif-title">Avisos de precio</div>
+                      <div className="notif-empty">
+                        Creá tu cuenta gratis, tocá "Seguir" en un producto y te avisamos cuando suba o baje de precio.
+                      </div>
+                      <Link className="account-row account-row-accent" href="/login" onClick={() => setNotifOpen(false)}>
+                        <AccountIcon name="cuenta" />
+                        <span>Crear cuenta</span>
+                        <Chevron />
+                      </Link>
+                    </>
+                  ) : (
+                  <>
                   <div className="notif-title">Productos que sigo</div>
                   {pushState !== 'unsupported' && (
                     <button
@@ -254,11 +297,12 @@ export default function Header({
                       </div>
                     ))
                   )}
+                  </>
+                  )}
                 </div>
                 </>
               )}
-            </div>
-          )}
+          </div>
 
           {/* Acá había un segundo botón de carrito, con su propio globito de
               cantidad, a 40px del que ya vive en la barra de abajo (que está

@@ -1,4 +1,4 @@
-export const CATEGORIES = ['Todos', 'Lácteos', 'Almacén', 'Limpieza', 'Bebidas', 'Perfumería', 'Frescos', 'Verdulería', 'Congelados', 'Mascotas'];
+export const CATEGORIES = ['Todos', 'Lácteos', 'Almacén', 'Carnes', 'Limpieza', 'Bebidas', 'Perfumería', 'Frescos', 'Verdulería', 'Congelados', 'Mascotas'];
 
 // Rubros que NO arman vidriera automática (las ~12 búsquedas fijas de
 // catalogQueriesFor). Verdulería es el caso: la fruta y verdura suelta casi
@@ -19,6 +19,7 @@ export const CATEGORY_COLORS: Record<string, [string, string]> = {
   'Limpieza': ['#8FE0B8', '#279B63'],
   'Bebidas': ['#FF9C89', '#D94E38'],
   'Perfumería': ['#E3A6E0', '#9C3FA0'],
+  'Carnes': ['#F0A3AE', '#B8384F'],
   'Frescos': ['#B7E39A', '#5C9E3A'],
   'Verdulería': ['#A9E06B', '#5B8C1E'],
   'Congelados': ['#9FD8F0', '#2B7FA3'],
@@ -39,7 +40,7 @@ export const HOME_TEASER_QUERIES: { category: string; query: string }[] = [
   { category: 'Limpieza', query: 'papel higienico' },
   { category: 'Bebidas', query: 'agua mineral' },
   { category: 'Perfumería', query: 'shampoo' },
-  { category: 'Frescos', query: 'pollo' },
+  { category: 'Carnes', query: 'pollo' },
   { category: 'Verdulería', query: 'tomate' },
   { category: 'Congelados', query: 'hamburguesa congelada' },
   { category: 'Mascotas', query: 'alimento balanceado para perros' },
@@ -55,7 +56,7 @@ export const HOME_TEASER_LIMIT = 11;
 // Son más de 240 búsquedas reales; cada una trae varios artículos con su nombre,
 // precio por súper (real) e imagen real (por código de barras), así que el
 // catálogo termina con varios miles de productos genuinos, no inventados.
-export const DEFAULT_CATALOG_QUERIES: { category: string; query: string }[] = [
+const RAW_CATALOG_QUERIES: { category: string; query: string }[] = [
   // Lácteos
   { category: 'Lácteos', query: 'leche entera' },
   { category: 'Lácteos', query: 'leche descremada' },
@@ -3119,6 +3120,21 @@ export const CATALOG_RESULTS_PER_QUERY = 8;
 // como sugerencias del buscador (lib/relatedSearches.ts).
 export const CATALOG_QUERIES_PER_PAGE = 12;
 
+// Carnes se separó de Frescos: hasta ahora todo lo que era carne, pollo,
+// pescado y achuras vivía dentro de "Frescos" mezclado con fiambres, quesos,
+// pastas y fruta. Las búsquedas de arriba siguen escritas con category
+// 'Frescos' (son más de 500 líneas); acá se reparten por lo que dice cada
+// búsqueda: lo que es carne, ave, pescado o embutido fresco pasa a 'Carnes',
+// y fiambres (jamón, salame, mortadela), quesos, huevos y pastas frescas se
+// quedan en Frescos. Para mover una búsqueda de rubro basta con que su texto
+// entre (o salga) de estas dos expresiones.
+const NO_ES_CARNE = /queso|fiambre|jamon|salam|mortadela|salchichon|pate$|lengua a la|arrollado de|pastron|lomito ahumado|bondiola (cocida|ahumada)|paleta (cocida|ahumada)|leberwurst|sopressata|coppa|guanciale|speck|soja|berenjena|pasta|ravioles|sorrentinos|capeletis|lasagna|tallarines|fideos|nnoquis|ñoquis|tapas|masa|huevo|tofu|hummus|ensalada|salsa|pesto/;
+const ES_CARNE = /pollo|pechuga|muslo|suprema|alita|ala de|higad|carcasa|carne|asado|vacio|matambre|entra[ñn]a|falda|roast beef|nalga|cuadril|colita|bife|peceto|osobuco|churrasco|carnaza|paleta de|costill|costeleta|carre|pechito|cerdo|milanesa|hamburguesa|albondiga|pincho|brochette|bondiol|chorizo|morcilla|longaniza|chistorra|salchicha|panceta|tocino|cordero|conejo|pato|pavo|molleja|chinchul|ri[ñn]on|hueso|lomo|entrecot|chulet|punta de espalda|palomita|tortuguita|aguja|brazuelo|solomillo|ribs|garr[oó]n|cuadrada|bola de lomo|lengua vacuna|corazon vacuno|sesos|rabo|achuras|tripa|mondongo|criadillas|pescado|merluza|salmon|filet de|camaron|calamar|langostino|rabas|mejillon|trucha|centolla|ostra|almeja|berberecho|sardina|pejerrey|abadejo|parrillada|manitas|oreja de cerdo|cuero de cerdo|chicharron|butifarra|sobrasada|t bone|porterhouse|chuleton|pollo/;
+
+export const DEFAULT_CATALOG_QUERIES: { category: string; query: string }[] = RAW_CATALOG_QUERIES.map((q) =>
+  q.category === 'Frescos' && !NO_ES_CARNE.test(q.query) && ES_CARNE.test(q.query) ? { ...q, category: 'Carnes' } : q
+);
+
 // Búsquedas "fijas" de la primera tanda de un rubro.
 //
 // Frescos tiene cientos de búsquedas (quesos, cortes, fiambres, pescados) y la
@@ -3128,19 +3144,33 @@ export const CATALOG_QUERIES_PER_PAGE = 12;
 // varios "Ver más". Estas son las que tienen que verse SIEMPRE al abrir el
 // rubro; el resto sigue rotando por día desde la segunda tanda.
 export const CATALOG_PINNED: Record<string, string[]> = {
-  Frescos: [
+  Carnes: [
     'asado',
     'tira de asado',
     'vacio',
     'matambre',
     'chorizo',
     'morcilla',
-    'salame',
-    'salamin',
     'bondiola',
-    'jamon cocido',
     'carne picada',
     'pollo',
+    'milanesa',
+    'pechuga de pollo',
+    'nalga',
+  ],
+  Frescos: [
+    'jamon cocido',
+    'jamon crudo',
+    'salame',
+    'salamin',
+    'mortadela',
+    'queso fetita',
+    'queso cuartirolo',
+    'queso tybo',
+    'queso mantecoso',
+    'provoleta',
+    'ravioles de ricota',
+    'papa',
   ],
 };
 
