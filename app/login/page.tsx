@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { getPasswordChecks, getPasswordStrength, meetsPasswordPolicy } from '@/lib/passwordStrength';
@@ -13,6 +13,19 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+
+  // Si /auth/callback no pudo confirmar el link (vencido, ya usado, etc.)
+  // manda para acá con ?error=confirm. Se lee del lado del cliente (en vez
+  // de useSearchParams) para no tener que envolver la página en Suspense
+  // solo por este aviso puntual.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('error') === 'confirm') {
+      setError('Ese link para confirmar el mail ya venció o se usó. Iniciá sesión con tu contraseña.');
+      window.history.replaceState(null, '', window.location.pathname);
+    }
+  }, []);
 
   const passwordChecks = getPasswordChecks(password);
   const passwordStrength = getPasswordStrength(password);
@@ -49,9 +62,11 @@ export default function LoginPage() {
       email,
       password,
       options: {
-        // Al confirmar el mail, Supabase lo manda de vuelta acá y ya queda
-        // logueado; desde acá lo mandamos directo al inicio.
-        emailRedirectTo: typeof window !== 'undefined' ? window.location.origin : undefined,
+        // Al confirmar el mail, Supabase manda a /auth/callback con un code
+        // (no directo acá): esa ruta lo cambia por la sesión real y recién
+        // ahí redirige al inicio, ya logueado. Sin pasar por /auth/callback
+        // el code se pierde y la persona queda como invitado.
+        emailRedirectTo: typeof window !== 'undefined' ? `${window.location.origin}/auth/callback` : undefined,
       },
     });
     if (signUpError) {

@@ -6,9 +6,11 @@ import { bestPerProduct, cartStats, ChosenEntry, estimatedStoreTotals, globalSto
 import { CartMap, Product, lowestKnownPrice } from '@/lib/types';
 import { addSaving } from '@/lib/savingsHistory';
 import { buildShareCardCanvas, shareOrDownloadCard } from '@/lib/shareCard';
-import StoreLogo, { chainLabel, getStoreLogo } from './StoreLogo';
-
-const STORE_COLORS = ['#2E8B57', '#3B6FD1', '#D79A34', '#B5533F', '#7C5CBF', '#1E8C86'];
+import { LiveItem } from '@/lib/liveItems';
+import { NearbyStore } from '@/lib/storePrices';
+import StoreLogo from './StoreLogo';
+import StoreTotalRows from './StoreTotalRows';
+import GeneralCompare from './GeneralCompare';
 
 // Arma el texto de la lista de compras: cada producto con su precio y el
 // súper más barato PARA ESE producto puntual (pueden ser súpers distintos
@@ -94,11 +96,12 @@ export default function CompareSection({
   revealed = true,
   remaining,
   onReveal,
-  pricesAgeLabel,
   refreshing = false,
   onRefreshPrices,
   pricesAt,
   onEdit,
+  generalPool,
+  generalStores,
 }: {
   selected: CartMap;
   productIndex: Record<string, Product>;
@@ -114,8 +117,6 @@ export default function CompareSection({
   // usos de la semana que le quedan al plan free (irrelevante si revealed).
   remaining?: number;
   onReveal?: () => void;
-  // "hace 20 min", "ayer"… de cuándo son los precios que se están mostrando.
-  pricesAgeLabel?: string | null;
   refreshing?: boolean;
   onRefreshPrices?: () => void;
   // Cuándo se trajo el precio más viejo del carrito (Date.now()), para el
@@ -123,8 +124,12 @@ export default function CompareSection({
   pricesAt?: number | null;
   // "Editar": abre el carrito para sacar o cambiar cantidades.
   onEdit?: () => void;
+  // Para la comparación general (carrito vacío): los productos de la portada
+  // y los súpers cercanos, de donde salen los precios de la canasta de ejemplo.
+  generalPool?: LiveItem[];
+  generalStores?: NearbyStore[];
 }) {
-  const { chosenEntries, totals, order, wins, complete } = cartStats(selected, productIndex, stores);
+  const { chosenEntries, totals, order, complete } = cartStats(selected, productIndex, stores);
 
   // Hasta 6 súpers para la comparación visual (ver MAX_CHAINS en
   // lib/storePrices.ts: ahora se chequean 6 cadenas cercanas en vez de 4,
@@ -137,7 +142,6 @@ export default function CompareSection({
   // nada para comparar.
   const MAX_STORES_SHOWN = 6;
   const storeTotals = estimatedStoreTotals(chosenEntries, stores).slice(0, MAX_STORES_SHOWN);
-  const shownStoreIdx = new Set(storeTotals.map((st) => st.storeIndex));
   const minEstTotal = storeTotals.length ? storeTotals[0].total : 0;
   const maxEstTotal = storeTotals.length ? storeTotals[storeTotals.length - 1].total : 0;
 
@@ -157,7 +161,6 @@ export default function CompareSection({
     ? Math.max(1, ...globalOrder.map((i) => globalIdx.avgOverpayPct[i] as number))
     : 1;
 
-  const [includeOpen, setIncludeOpen] = useState(false);
   const [copyStatus, setCopyStatus] = useState<'idle' | 'ok' | 'error'>('idle');
   const copyTimeout = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
@@ -171,28 +174,38 @@ export default function CompareSection({
   // poder armar la torta de "en qué rubro ahorrás más" en "Tus ahorros".
   const savingByCategory = potentialSavingsByCategory(chosenEntries);
 
+  // "Copiar lista del súper": solo copia el texto. Sumar el ahorro al mes es
+  // otro botón (handleAddSaving); antes eran un solo botón que hacía las dos
+  // cosas juntas.
   async function handleCopyList() {
     const text = buildShoppingListText(chosenEntries, stores, order, totals, complete);
     const ok = await copyText(text);
     setCopyStatus(ok ? 'ok' : 'error');
     if (copyTimeout.current) clearTimeout(copyTimeout.current);
     copyTimeout.current = setTimeout(() => setCopyStatus('idle'), 2600);
-
-    // Al confirmar la lista (copiarla para ir a comprar), sumamos el ahorro
-    // de esta compra al total del mes. No depende de que el carrito siga
-    // como está: queda guardado en el historial aparte.
-    if (ok && savingAmount > 0) {
-      const logged = await addSaving(userId, savingAmount, savingByCategory);
-      if (logged) onSavingLogged?.();
-    }
   }
 
-  // Compartir por WhatsApp (free): mismo texto que "Copiar lista", pero
-  // abre directo la app/web de WhatsApp con el mensaje ya cargado en vez de
-  // depender de que el usuario lo pegue a mano.
-  function handleShareWhatsapp() {
-    const text = buildShoppingListText(chosenEntries, stores, order, totals, complete);
-    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank', 'noopener,noreferrer');
+  // "Agregar a mis ahorros": suma el ahorro de esta compra al total del mes
+  // (queda guardado en el historial aparte). Se puede hacer una sola vez por
+  // carrito: la firma (productos + cantidades) recuerda cuál ya se sumó, así
+  // un doble toque no cuenta el mismo ahorro dos veces. Si el carrito cambia,
+  // la firma cambia y el botón vuelve a estar disponible.
+  const cartKey = chosenEntries.map((e) => `${e.id}:${e.qty}`).join('|');
+  const [savingStatus, setSavingStatus] = useState<'idle' | 'busy' | 'error'>('idle');
+  const [savedCartKey, setSavedCartKey] = useState<string | null>(null);
+  const alreadySaved = savedCartKey === cartKey;
+
+  async function handleAddSaving() {
+    if (savingAmount <= 0 || alreadySaved || savingStatus === 'busy') return;
+    setSavingStatus('busy');
+    const logged = await addSaving(userId, savingAmount, savingByCategory);
+    if (logged) {
+      setSavedCartKey(cartKey);
+      setSavingStatus('idle');
+      onSavingLogged?.();
+    } else {
+      setSavingStatus('error');
+    }
   }
 
   // Tarjeta/imagen prolija (premium): arma un PNG con Canvas y lo comparte
@@ -213,9 +226,6 @@ export default function CompareSection({
     cardTimeout.current = setTimeout(() => setCardStatus('idle'), 2600);
   }
 
-  const best = bestPerProduct(chosenEntries);
-  const totalUnits = chosenEntries.reduce((sum, e) => sum + e.qty, 0);
-
   return (
     <div className="main-compare-block" id="mainCompareBlock">
       <div className="dc-head">
@@ -227,11 +237,21 @@ export default function CompareSection({
         )}
       </div>
 
-      {chosenEntries.length === 0 && !hasGlobalChart && (
+      {/* Carrito vacío: en vez de dejar esto vacío, una comparación general
+          de una canasta de ejemplo entre 4 súpers. Si todavía no se puede
+          armar (sin ubicación, sin productos, Precios Claros caído), queda lo
+          de antes: el panorama según lo que el usuario ya vio, o el cartel. */}
+      {chosenEntries.length === 0 && (
+        <GeneralCompare
+          pool={generalPool ?? []}
+          stores={generalStores ?? []}
+          fallback={
+            <>
+      {!hasGlobalChart && (
         <div className="compare-sub">Agregá productos al carrito para ver en qué súper te conviene comprarlos.</div>
       )}
 
-      {chosenEntries.length === 0 && hasGlobalChart && (
+      {hasGlobalChart && (
         <div className="savings-chart">
           {globalOrder.map((si, pos) => {
             const pct = globalIdx.avgOverpayPct[si] as number;
@@ -266,6 +286,10 @@ export default function CompareSection({
           })}
         </div>
       )}
+            </>
+          }
+        />
+      )}
 
       {chosenEntries.length > 0 && !revealed && (remaining ?? 0) > 0 && (
         <div className="compare-locked">
@@ -295,47 +319,19 @@ export default function CompareSection({
       {chosenEntries.length > 0 && revealed && (
         <>
           <div className="dc-card">
-            {storeTotals.map((st) => {
-              // Marcamos por VALOR, no por posición: si dos o más súpers
-              // empatan en el total más bajo, todos se marcan — no solo el
-              // primero que aparece en el orden. Así nadie parece "el
-              // elegido" cuando en realidad hay un empate.
-              const isBest = st.total === minEstTotal;
-              const diff = st.total - minEstTotal;
-              const chain = stores[st.storeIndex];
-              return (
-                <div className="dc-row" key={st.storeIndex}>
-                  <span className="dc-logo">
-                    {getStoreLogo(chain) ? (
-                      <StoreLogo chain={chain} size={26} />
-                    ) : (
-                      <span className="dc-logo-letter">{chain.charAt(0).toUpperCase()}</span>
-                    )}
-                  </span>
-                  <div className="dc-mid">
-                    <div className="dc-name-line">
-                      <span className="dc-name">{chainLabel(chain)}</span>
-                      {isBest && <span className="dc-best">Más barato</span>}
-                      {!st.complete && <span className="dc-est">Estimado</span>}
-                    </div>
-                    <div className="dc-track">
-                      {/* El ancho va inline y el llenado es una animación CSS de
-                          entrada: antes se seteaba desde un efecto que solo
-                          corría si cambiaba el total, y las barras quedaban
-                          vacías si el desglose se revelaba sin cambios. */}
-                      <div
-                        className={`dc-fill${isBest ? ' best' : ''}`}
-                        style={{ width: `${maxEstTotal ? Math.min(100, Math.round((st.total / maxEstTotal) * 100)) : 0}%` }}
-                      />
-                    </div>
-                  </div>
-                  <div className="dc-amt">
-                    <span className="dc-amt-total">{fmt(st.total)}</span>
-                    {!isBest && diff > 0 && <span className="dc-amt-diff">+{fmt(diff)}</span>}
-                  </div>
-                </div>
-              );
-            })}
+            <StoreTotalRows
+              rows={storeTotals.map((st) => ({
+                key: st.storeIndex,
+                chain: stores[st.storeIndex],
+                total: st.total,
+                // Marcamos por VALOR (ver TotalRow.isBest): con empate en el
+                // total más bajo se marcan todos.
+                isBest: st.total === minEstTotal,
+                diff: st.total - minEstTotal,
+                estimated: !st.complete,
+              }))}
+              maxTotal={maxEstTotal}
+            />
           </div>
 
           <div className="dc-meta">
@@ -346,133 +342,63 @@ export default function CompareSection({
                 ? formatUpdated(pricesAt)
                 : 'Precios oficiales de Precios Claros'}
             </span>
-            <button
-              type="button"
-              className="dc-link"
-              aria-expanded={includeOpen}
-              onClick={() => setIncludeOpen((v) => !v)}
-            >
-              Qué incluye
-            </button>
+            {/* Acá estaba "Qué incluye". El "Actualizar" (refrescar los precios
+                a mano) vivía adentro de esa tarjeta: se deja acá para no
+                perder la función. */}
+            {onRefreshPrices && (
+              <button type="button" className="dc-link" onClick={onRefreshPrices} disabled={refreshing}>
+                Actualizar
+              </button>
+            )}
           </div>
 
-          {includeOpen && (
-            <div className="dc-include">
-              <div className="dc-include-title">Qué incluye esta comparación</div>
-              <p className="dc-include-text">
-                Suma tu canasta de {chosenEntries.length} producto{chosenEntries.length === 1 ? '' : 's'}
-                {totalUnits !== chosenEntries.length ? ` (${totalUnits} unidades)` : ''} en cada súper cercano,
-                con los precios de Precios Claros. Si un súper no informó el precio de algún producto, se
-                completa con el promedio de los demás y aparece marcado como “Estimado”.
-              </p>
+          <div className="compare-actions">
+            <button className="cta-btn" onClick={handleCopyList}>
+              {copyStatus === 'ok'
+                ? '¡Lista copiada! ✓'
+                : copyStatus === 'error'
+                ? 'No se pudo copiar, probá de nuevo'
+                : 'Copiar lista del súper'}
+            </button>
 
-              <div className="wins-row">
-                {stores.map((s, si) => ({ s, si }))
-                  // Los mismos súpers que aparecen arriba en la tarjeta, para
-                  // que estos chips no mencionen uno que no se ve en el
-                  // desglose de totales.
-                  .filter(({ si }) => shownStoreIdx.has(si))
-                  .map(({ s, si }) => (
-                    <div className={`win-chip${wins[si] === 0 ? ' zero' : ''}`} key={s}>
-                      <span className="dot" style={{ background: STORE_COLORS[si % STORE_COLORS.length] }} />
-                      <StoreLogo chain={s} size={16} />: <strong>{wins[si]}</strong>/{chosenEntries.length}
-                    </div>
-                  ))}
-              </div>
+            {/* Solo si hay algo para sumar (o ya se sumó): con ahorro 0 el botón
+                no haría nada. */}
+            {(savingAmount > 0 || alreadySaved) && (
+              <button
+                className="cta-btn secondary"
+                onClick={handleAddSaving}
+                disabled={alreadySaved || savingStatus === 'busy'}
+              >
+                {alreadySaved
+                  ? '¡Sumado a tu ahorro del mes! ✓'
+                  : savingStatus === 'busy'
+                  ? 'Sumando…'
+                  : savingStatus === 'error'
+                  ? 'No se pudo sumar, probá de nuevo'
+                  : `Agregar ${fmt(savingAmount)} a mis ahorros`}
+              </button>
+            )}
 
-              <div className="dc-include-list">
-                {best.map((p) => (
-                  <div className="dc-include-item" key={p.id}>
-                    <span className="dc-include-item-name">
-                      {p.qty > 1 ? `${p.qty} × ` : ''}
-                      {p.name}
-                    </span>
-                    <span className="dc-include-item-price">
-                      {p.precio === null ? 'sin precio' : `${fmt(p.precio)}${p.store ? ` · ${chainLabel(p.store)}` : ''}`}
-                    </span>
-                  </div>
-                ))}
-              </div>
-
-              {/* De cuándo son estos precios, y refrescarlos a mano. */}
-              <div className="price-freshness">
-                <span className="price-freshness-dot" />
-                <span>
-                  {refreshing
-                    ? 'Actualizando precios…'
-                    : pricesAgeLabel
-                    ? `Precios de Precios Claros, traídos ${pricesAgeLabel}`
-                    : 'Precios oficiales de Precios Claros'}
-                </span>
-                {onRefreshPrices && (
-                  <button
-                    type="button"
-                    className="price-freshness-refresh"
-                    onClick={onRefreshPrices}
-                    disabled={refreshing}
-                  >
-                    Actualizar
-                  </button>
-                )}
-              </div>
-
-              <div className="copy-list-block">
-                <button className="cta-btn secondary" style={{ width: '100%' }} onClick={handleCopyList}>
-                  {copyStatus === 'ok'
-                    ? savingAmount > 0
-                      ? `¡Lista copiada! Sumamos ${fmt(savingAmount)} a tu ahorro del mes ✓`
-                      : '¡Lista copiada! ✓'
-                    : copyStatus === 'error'
-                    ? 'No se pudo copiar, probá de nuevo'
-                    : 'Copiar lista y sumar a mi ahorro del mes'}
-                </button>
-                <div className="copy-list-hint">
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M3 4h2l1.6 9.6a2 2 0 0 0 2 1.7h7.6a2 2 0 0 0 2-1.6L20 8H6.2" />
-                    <circle cx="9.5" cy="19" r="1.3" />
-                    <circle cx="16.5" cy="19" r="1.3" />
-                  </svg>
-                  Copiamos cada producto con su mejor precio y sumamos el ahorro a tu cuenta.
-                </div>
-              </div>
-
-              <div className="share-row">
-                <button className="cta-btn secondary share-btn" style={{ width: '100%' }} onClick={handleShareWhatsapp}>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                    <circle cx="18" cy="5" r="2.4" /><circle cx="6" cy="12" r="2.4" /><circle cx="18" cy="19" r="2.4" />
-                    <path d="M8.1 10.7l7.8-4.4M8.1 13.3l7.8 4.4" />
-                  </svg>
-                  Compartir por WhatsApp
-                </button>
-                {premium ? (
-                  <button className="cta-btn secondary share-btn" style={{ width: '100%' }} onClick={handleShareCard} disabled={cardStatus === 'busy'}>
-                    {cardStatus === 'busy'
-                      ? 'Armando la tarjeta…'
-                      : cardStatus === 'ok'
-                      ? '¡Lista! ✓'
-                      : cardStatus === 'error'
-                      ? 'No se pudo generar, probá de nuevo'
-                      : (
-                        <>
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                            <rect x="3" y="4" width="18" height="16" rx="2" /><circle cx="8.5" cy="9.5" r="1.5" /><path d="M21 16l-5.5-5.5L5 20" />
-                          </svg>
-                          Compartir como tarjeta
-                        </>
-                      )}
-                  </button>
-                ) : (
-                  <div className="share-premium-hint">
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <rect x="5" y="11" width="14" height="9" rx="1.5" /><path d="M8 11V7a4 4 0 0 1 8 0v4" />
-                    </svg>
-                    La tarjeta prolija para compartir (con imagen, no solo texto) es una función
-                    premium.
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
+            {/* Beneficio Premium: la tarjeta (imagen) para compartir. */}
+            {premium && (
+              <button className="cta-btn secondary share-btn" onClick={handleShareCard} disabled={cardStatus === 'busy'}>
+                {cardStatus === 'busy'
+                  ? 'Armando la tarjeta…'
+                  : cardStatus === 'ok'
+                  ? '¡Lista! ✓'
+                  : cardStatus === 'error'
+                  ? 'No se pudo generar, probá de nuevo'
+                  : (
+                    <>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                        <rect x="3" y="4" width="18" height="16" rx="2" /><circle cx="8.5" cy="9.5" r="1.5" /><path d="M21 16l-5.5-5.5L5 20" />
+                      </svg>
+                      Compartir como tarjeta
+                    </>
+                  )}
+              </button>
+            )}
+          </div>
         </>
       )}
     </div>

@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { fmt } from '@/lib/products';
-import { chainLabel } from './StoreLogo';
+import StoreLogo, { chainLabel } from './StoreLogo';
 
 // La tarjeta de ahorro: el hero de la portada.
 //
@@ -61,12 +61,16 @@ function CartHeroCard({ cart }: { cart: CartHero }) {
     title = 'Precios parejos';
     detail = 'Tu carrito sale lo mismo en las cadenas cercanas.';
   } else {
-    // El nombre del súper va en texto grande, en una segunda línea. Antes iba
-    // el logo: sobre el violeta del hero se leía menos que el nombre.
+    // El súper va con su logo, en una segunda línea. Va dentro de una caja
+    // blanca (la que ya arma StoreLogo) porque los logos, sueltos, se pierden
+    // sobre el violeta del hero. Si la cadena no tiene logo cargado, StoreLogo
+    // cae al nombre en texto.
     title = (
       <>
         <span className="savings-verdict-line">Hoy conviene</span>
-        <span className="savings-verdict-line">{shortChain(verdict.chain)}</span>
+        <span className="savings-verdict-line savings-verdict-logo">
+          <StoreLogo chain={verdict.chain} size={30} />
+        </span>
       </>
     );
     detail = single

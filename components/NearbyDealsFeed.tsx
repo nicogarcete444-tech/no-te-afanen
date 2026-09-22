@@ -81,7 +81,8 @@ export default function NearbyDealsFeed({
     if (!stores.length || !pool.length) return;
     let cancelled = false;
     setLoading(true);
-    findNearbyDeals(pool, stores)
+    // Tope 30 (no los 12 de por defecto): se desliza para el costado y se ven todas.
+    findNearbyDeals(pool, stores, { max: 30 })
       .then((found) => {
         if (cancelled) return;
         setDeals(found);

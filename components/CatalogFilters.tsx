@@ -2,6 +2,7 @@
 
 import { SortOrder } from '@/lib/liveItems';
 import SortMenu from './SortMenu';
+import CategoryIcon from './CategoryIcon';
 
 // Fila de filtros de abajo de "Catálogo": Todos · Bajaron · un rubro por
 // cada uno que hay en la lista · Filtro (orden). Se desliza hacia los
@@ -59,6 +60,7 @@ export default function CatalogFilters({
           aria-pressed={active === c}
           onClick={() => onChange(c)}
         >
+          <CategoryIcon category={c} />
           {c}
         </button>
       ))}

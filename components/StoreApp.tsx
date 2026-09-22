@@ -26,7 +26,6 @@ import { applyTheme, resolveInitialTheme, Theme } from '@/lib/theme';
 
 import Header from './Header';
 import SavingsCard from './SavingsCard';
-import CategoryChips from './CategoryChips';
 import { extractEan, groupLiveItems, LiveItem, normalizeEan, SortOrder } from '@/lib/liveItems';
 import { getProductImageUrl, getProductNameByEan, photoLookupName, resolveSearchableName } from '@/lib/productImage';
 import CategoryProductList from './CategoryProductList';
@@ -99,6 +98,16 @@ function ListSkeleton({ rows }: { rows: number }) {
     </div>
   );
 }
+
+// Cuántos productos de un rubro se muestran de entrada al elegirlo en las
+// píldoras de la portada, y cuántos se suman cada vez que se toca "Mostrar más".
+const RUBRO_PAGE_SIZE = 10;
+
+// "Ofertas cerca tuyo" mira productos de TODOS los rubros, no solo los 10 de la
+// portada: de cada rubro se piden las primeras búsquedas (esta cantidad, con
+// esta cantidad de resultados cada una) y con eso se buscan promos activas.
+const DEALS_QUERIES_PER_RUBRO = 2;
+const DEALS_RESULTS_PER_QUERY = 5;
 
 export default function StoreApp({
   userId,
@@ -254,6 +263,24 @@ export default function StoreApp({
   // comentario largo en lib/products.ts sobre por qué.
   const [catalogPage, setCatalogPage] = useState(0);
   const [loadingMore, setLoadingMore] = useState(false);
+
+  // Rubro elegido en las píldoras de la portada (ver rubroMode más abajo): la
+  // portada trae un solo producto por rubro, así que al elegir uno se piden
+  // más de ese rubro. Se guardan por rubro para no volver a pedirlos si el
+  // usuario va y vuelve entre píldoras.
+  const [rubroItems, setRubroItems] = useState<Record<string, LiveItem[]>>({});
+  // Cuántas tandas (de CATALOG_QUERIES_PER_PAGE búsquedas) ya se pidieron de cada rubro.
+  const [rubroPages, setRubroPages] = useState<Record<string, number>>({});
+  // Rubro que se está pidiendo ahora mismo (null = ninguno).
+  const [rubroLoadingCat, setRubroLoadingCat] = useState<string | null>(null);
+  // Cuántos productos del rubro se ven (arranca en 10, "Mostrar más" suma 10).
+  const [rubroLimit, setRubroLimit] = useState(RUBRO_PAGE_SIZE);
+  // Se pide de a una tanda por vez, para no disparar cientos de búsquedas juntas.
+  const rubroInFlight = useRef(false);
+
+  // Productos de todos los rubros, intercalados (uno de cada rubro, después otro
+  // de cada uno...), de donde salen las "Ofertas cerca tuyo".
+  const [dealsSweep, setDealsSweep] = useState<LiveItem[]>([]);
 
   const [nearbyStores, setNearbyStores] = useState<NearbyStore[]>([]);
   const [storesStatus, setStoresStatus] = useState('');
@@ -785,11 +812,37 @@ export default function StoreApp({
   // un rubro elegido arriba hay uno solo y las píldoras sobran.
   const filterCategories = useMemo(() => {
     if (activeCategory !== 'Todos') return [] as string[];
+    const all = CATEGORIES.filter((c) => c !== 'Todos');
+    // Sin buscar nada: están todos los rubros, porque al tocar uno se piden
+    // sus productos (la portada sola trae uno por rubro, y de alguno ni uno).
+    if (!searchTerm) return all.filter((c) => !CATALOG_BROWSE_DISABLED.includes(c));
+    // Buscando: solo los rubros que tienen algo entre lo que se filtró.
     const present = new Set(filteredCatalog.map((item) => item._cat).filter((c): c is string => !!c));
-    return CATEGORIES.filter((c) => c !== 'Todos' && present.has(c));
-  }, [filteredCatalog, activeCategory]);
+    return all.filter((c) => present.has(c));
+  }, [filteredCatalog, activeCategory, searchTerm]);
+
+  // Modo "rubro": en la portada (sin buscar nada) se eligió un rubro en las
+  // píldoras. En ese caso no alcanza con el único producto que trae la
+  // portada: se piden más de ese rubro y se muestran de a 10 (con "Mostrar
+  // más" abajo de todo). En "Todos" y en "Bajaron" no cambia nada.
+  const rubroMode =
+    !liveMode && activeCategory === 'Todos' && !searchTerm && catalogFilter !== 'todos' && catalogFilter !== 'bajaron';
+
+  // Todo lo que hay del rubro: el producto de la portada más lo que se fue
+  // pidiendo (sin repetidos).
+  const rubroAll = useMemo(() => {
+    if (!rubroMode) return [] as LiveItem[];
+    const base = filteredCatalog.filter((item) => item._cat === catalogFilter);
+    return groupLiveItems([...base, ...(rubroItems[catalogFilter] || [])]).map(({ item }) => item);
+  }, [rubroMode, filteredCatalog, catalogFilter, rubroItems]);
+
+  const rubroPagesLoaded = rubroMode ? rubroPages[catalogFilter] ?? 0 : 0;
+  const rubroCanLoadMore =
+    rubroMode && !CATALOG_BROWSE_DISABLED.includes(catalogFilter) && rubroPagesLoaded < catalogPagesFor(catalogFilter);
+  const rubroFetching = rubroMode && rubroLoadingCat === catalogFilter;
 
   const visibleCatalog = useMemo(() => {
+    if (rubroMode) return rubroAll.slice(0, rubroLimit);
     if (catalogFilter === 'todos') return filteredCatalog;
     if (catalogFilter === 'bajaron') {
       return filteredCatalog.filter((item) => {
@@ -798,7 +851,111 @@ export default function StoreApp({
       });
     }
     return filteredCatalog.filter((item) => item._cat === catalogFilter);
-  }, [filteredCatalog, catalogFilter, dealEans]);
+  }, [rubroMode, rubroAll, rubroLimit, filteredCatalog, catalogFilter, dealEans]);
+
+  // Pide UNA tanda de búsquedas del rubro y va sumando lo que llega (en
+  // sub-lotes de 6, como la carga del catálogo), así los primeros productos
+  // aparecen sin esperar a que termine la tanda entera.
+  async function loadRubroPage(cat: string) {
+    if (!coords || rubroInFlight.current) return;
+    const page = rubroPages[cat] ?? 0;
+    if (page >= catalogPagesFor(cat)) return;
+    rubroInFlight.current = true;
+    setRubroLoadingCat(cat);
+    const { lat, lng } = coords;
+    const BATCH_SIZE = 6;
+    try {
+      const queries = catalogQueriesFor(cat, page);
+      for (let i = 0; i < queries.length; i += BATCH_SIZE) {
+        const batch = queries.slice(i, i + BATCH_SIZE);
+        const results = await Promise.all(
+          batch.map(({ category, query }) =>
+            fetch(`/api/productos?q=${encodeURIComponent(query)}&lat=${lat}&lng=${lng}&limit=${CATALOG_RESULTS_PER_QUERY}`)
+              .then((res) => (res.ok ? res.json() : { productos: [] }))
+              .then((data) => (data.productos || []).map((p: LiveItem) => ({ ...p, _cat: category })))
+              .catch(() => [] as LiveItem[])
+          )
+        );
+        const chunk = results.flat();
+        if (chunk.length) setRubroItems((prev) => ({ ...prev, [cat]: [...(prev[cat] || []), ...chunk] }));
+      }
+    } finally {
+      rubroInFlight.current = false;
+      // Aunque la tanda haya vuelto vacía se cuenta como pedida, para no
+      // reintentar en bucle si Precios Claros está caído.
+      setRubroPages((prev) => ({ ...prev, [cat]: page + 1 }));
+      setRubroLoadingCat(null);
+    }
+  }
+
+  // Barrido para "Ofertas cerca tuyo": unas pocas búsquedas de cada rubro, en
+  // sub-lotes de 6 como el resto, para que las ofertas salgan de todos los
+  // rubros y no solo de los pocos productos de la portada. Se intercalan por
+  // rubro para que, con el tope de productos que se revisan, ningún rubro
+  // se quede afuera.
+  useEffect(() => {
+    if (!coords) return;
+    let cancelled = false;
+    const { lat, lng } = coords;
+    const rubros = CATEGORIES.filter((c) => c !== 'Todos' && !CATALOG_BROWSE_DISABLED.includes(c));
+    const queries = rubros.flatMap((cat) => catalogQueriesFor(cat, 0).slice(0, DEALS_QUERIES_PER_RUBRO));
+    const BATCH_SIZE = 6;
+
+    (async () => {
+      const perRubro: LiveItem[][] = rubros.map(() => []);
+      for (let i = 0; i < queries.length; i += BATCH_SIZE) {
+        const batch = queries.slice(i, i + BATCH_SIZE);
+        const results = await Promise.all(
+          batch.map(({ category, query }) =>
+            fetch(`/api/productos?q=${encodeURIComponent(query)}&lat=${lat}&lng=${lng}&limit=${DEALS_RESULTS_PER_QUERY}`)
+              .then((res) => (res.ok ? res.json() : { productos: [] }))
+              .then((data) => (data.productos || []).map((p: LiveItem) => ({ ...p, _cat: category })))
+              .catch(() => [] as LiveItem[])
+          )
+        );
+        if (cancelled) return;
+        results.forEach((items, j) => {
+          perRubro[rubros.indexOf(batch[j].category)].push(...items);
+        });
+      }
+      const mixed: LiveItem[] = [];
+      for (let k = 0; ; k++) {
+        let added = false;
+        for (const list of perRubro) {
+          if (list[k]) {
+            mixed.push(list[k]);
+            added = true;
+          }
+        }
+        if (!added) break;
+      }
+      if (!cancelled) setDealsSweep(mixed);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [coords]);
+
+  // Productos entre los que se buscan ofertas: primero los de la portada (son
+  // los que el usuario ve en el catálogo) y después el barrido de todos los rubros.
+  const dealsPool = useMemo(() => [...catalogItems, ...dealsSweep], [catalogItems, dealsSweep]);
+
+  // Cambiar de píldora vuelve a empezar en 10.
+  useEffect(() => {
+    setRubroLimit(RUBRO_PAGE_SIZE);
+  }, [catalogFilter, activeCategory, searchTerm]);
+
+  // Pide lo que falta: la primera tanda al elegir el rubro, y otra más si con
+  // lo que hay no se llega a llenar lo que se quiere mostrar.
+  useEffect(() => {
+    if (!rubroMode || !coords || rubroLoadingCat) return;
+    if (CATALOG_BROWSE_DISABLED.includes(catalogFilter)) return;
+    const loaded = rubroPages[catalogFilter] ?? 0;
+    if (loaded >= catalogPagesFor(catalogFilter)) return;
+    if (loaded === 0 || rubroAll.length < rubroLimit) loadRubroPage(catalogFilter);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rubroMode, coords, catalogFilter, rubroPages, rubroLoadingCat, rubroAll.length, rubroLimit]);
 
   // diccionario único id -> producto, con los productos que el usuario fue
   // agregando al carrito (todos vienen de Precios Claros, catálogo o búsqueda).
@@ -1096,13 +1253,13 @@ export default function StoreApp({
             escáner que ya tienen el botón central de la barra de abajo y el
             propio buscador, y se comía una franja entera de la portada
             antes de que se viera un solo producto. */}
-        <CategoryChips active={activeCategory} onSelect={setActiveCategory} />
 
-        {/* Los rubros van justo debajo del hero y las ofertas después: se
-            elige el rubro primero y recién ahí se ven las promos. */}
+        {/* La fila de chips de rubros que estaba acá se sacó a pedido: los rubros
+            se eligen en las píldoras de abajo, en el catálogo. Las ofertas van
+            justo debajo del hero y muestran las de todos los rubros. */}
         {!liveMode && (
           <NearbyDealsFeed
-            pool={catalogItems}
+            pool={dealsPool}
             stores={nearbyStores}
             selected={selected}
             onToggle={toggleLiveProduct}
@@ -1111,26 +1268,6 @@ export default function StoreApp({
             onEansChange={setDealEans}
           />
         )}
-
-        {/* "Dónde conviene hoy": la comparación del carrito por súper. Subió
-            de abajo de todo a justo arriba del catálogo, que es lo primero
-            que se mira después del hero. */}
-        <CompareSection
-          selected={selected}
-          productIndex={productIndex}
-          stores={storeNames}
-          userId={userId}
-          premium={premium}
-          onSavingLogged={() => setSavingsRefreshKey((k) => k + 1)}
-          revealed={compareRevealedEffective}
-          remaining={compareRemaining}
-          onReveal={handleCompareNow}
-          pricesAgeLabel={pricesAgeLabel}
-          pricesAt={pricesAge}
-          refreshing={refreshingPrices}
-          onRefreshPrices={() => refreshPricesNow(true)}
-          onEdit={() => setCartOpen(true)}
-        />
 
         <div className="list-header catalog-head" id="catalogo">
           <h2>{liveMode ? 'Resultados' : 'Catálogo'}</h2>
@@ -1183,7 +1320,7 @@ export default function StoreApp({
               <div className="spinner" aria-hidden="true" />
               <div>Cargando productos…</div>
             </div>
-          ) : filteredCatalog.length === 0 ? (
+          ) : filteredCatalog.length === 0 && !rubroMode ? (
             <div className="empty-state">
               <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
                 <circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" />
@@ -1205,6 +1342,12 @@ export default function StoreApp({
                   Reintentar
                 </button>
               )}
+            </div>
+          ) : rubroMode && visibleCatalog.length === 0 && (rubroFetching || rubroCanLoadMore) ? (
+            // Rubro recién elegido y todavía no llegó nada: cargando, no "vacío".
+            <div className="loading-state" role="status" aria-live="polite">
+              <div className="spinner" aria-hidden="true" />
+              <div>Cargando productos…</div>
             </div>
           ) : visibleCatalog.length === 0 ? (
             <div className="empty-state">
@@ -1229,6 +1372,19 @@ export default function StoreApp({
             />
           )}
 
+          {/* Rubro elegido en las píldoras: "Mostrar más" suma 10 productos del
+              mismo rubro. Si con lo cargado no alcanza, el efecto de arriba pide
+              la tanda que falta y mientras tanto el botón queda esperando. */}
+          {rubroMode && visibleCatalog.length > 0 && (rubroAll.length > rubroLimit || rubroCanLoadMore || rubroFetching) && (
+            <button
+              className="cta-btn secondary load-more-btn"
+              onClick={() => setRubroLimit((l) => l + RUBRO_PAGE_SIZE)}
+              disabled={rubroFetching && rubroAll.length <= rubroLimit}
+            >
+              {rubroFetching && rubroAll.length <= rubroLimit ? 'Buscando más productos…' : 'Mostrar más'}
+            </button>
+          )}
+
           {/* El rubro tiene muchísimos más productos, pero se piden de a
               tandas para no disparar cientos de búsquedas de una (ver
               lib/products.ts). Esto trae la tanda siguiente. */}
@@ -1242,6 +1398,27 @@ export default function StoreApp({
             </button>
           )}
         </div>
+
+        {/* "Dónde conviene hoy": la comparación del carrito por súper. Va abajo
+            de todo, después del catálogo. (El botón de comparar sigue llevando
+            hasta acá: scrollToCompare busca #mainCompareBlock.) */}
+        <CompareSection
+          selected={selected}
+          productIndex={productIndex}
+          stores={storeNames}
+          userId={userId}
+          premium={premium}
+          onSavingLogged={() => setSavingsRefreshKey((k) => k + 1)}
+          revealed={compareRevealedEffective}
+          remaining={compareRemaining}
+          onReveal={handleCompareNow}
+          pricesAt={pricesAge}
+          refreshing={refreshingPrices}
+          onRefreshPrices={() => refreshPricesNow(true)}
+          onEdit={() => setCartOpen(true)}
+          generalPool={catalogItems}
+          generalStores={nearbyStores}
+        />
 
       </div>
 

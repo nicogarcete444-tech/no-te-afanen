@@ -172,9 +172,6 @@ export default function ProductCard({
         .sort((a, b) => a.precio - b.precio)
     : [];
   const top = ranked.slice(0, 3);
-  const cheapest = ranked[0];
-  const priciest = ranked.length > 1 ? ranked[ranked.length - 1] : null;
-  const saving = cheapest && priciest ? priciest.precio - cheapest.precio : 0;
 
   // Sin código de barras o sin súpers cerca no hay nada que pedir: se ve solo
   // el respaldo. Con código y súpers, arranca en esqueleto hasta que llegue.
@@ -234,7 +231,7 @@ export default function ProductCard({
             <div className={`pcard-tile${i === 0 ? ' best' : ''}`} key={t.chain} title={t.chain}>
               <span className="pcard-tile-logo">
                 {getStoreLogo(t.chain) ? (
-                  <StoreLogo chain={t.chain} size={24} />
+                  <StoreLogo chain={t.chain} size={18} />
                 ) : (
                   <span className="pcard-tile-name">{chainLabel(t.chain)}</span>
                 )}
@@ -259,13 +256,6 @@ export default function ProductCard({
       )}
 
       <div className="pcard-foot">
-        <div className="pcard-save">
-          {showTiles && saving > 0 && priciest ? (
-            <>
-              Ahorrás <strong>{fmt(saving)}</strong> vs {chainLabel(priciest.chain)}
-            </>
-          ) : null}
-        </div>
         <button
           type="button"
           className={`pcard-add${isSelected ? ' in-cart' : ''}${adding ? ' busy' : ''}`}

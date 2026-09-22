@@ -24,7 +24,7 @@ export type NearbyDeal = {
 // Corre `worker` sobre `items` de a lo sumo `limit` en simultáneo, en vez de
 // disparar todos los pedidos juntos (eso saturaría /api/producto y pisaría
 // el rate limit del servidor para una sola carga de pantalla).
-async function mapWithConcurrency<T, R>(
+export async function mapWithConcurrency<T, R>(
   items: T[],
   limit: number,
   worker: (item: T) => Promise<R>

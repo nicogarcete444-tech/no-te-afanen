@@ -171,7 +171,7 @@ Diferencias entre free y premium:
 | Carrito | hasta 10 productos distintos (`FREE_CART_PRODUCT_LIMIT` en `lib/premium.ts`) | sin límite |
 | Comparar precios ("Comparar ahora") | 3 veces por semana (`FREE_COMPARE_LIMIT` en `lib/compareLimit.ts`) | sin límite |
 | Alertas de bajada de precio | hasta 5 productos vigilados a la vez (`FREE_ALERT_LIMIT` en `lib/priceAlerts.ts`) | sin límite |
-| Compartir carrito | texto (WhatsApp) | + tarjeta/imagen prolija (PNG, `lib/shareCard.ts`) |
+| Compartir carrito | copiar la lista (texto) | + tarjeta/imagen prolija (PNG, `lib/shareCard.ts`) |
 
 Invitados (sin cuenta) cuentan como free en todo lo de arriba, salvo
 alertas (piden cuenta).

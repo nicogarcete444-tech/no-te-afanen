@@ -1,0 +1,81 @@
+<!--
+  Plantilla del mail "Confirm signup" de Supabase.
+
+  No se pega ni se usa desde el código de la app: Supabase manda este mail
+  desde sus propios servidores, así que el texto y diseño se configuran en
+  el dashboard, no acá. Este archivo queda en el repo solo como referencia
+  de lo que hay que pegar.
+
+  Cómo activarlo:
+  1. Supabase Dashboard → tu proyecto → Authentication → Emails →
+     "Confirm signup".
+  2. Borrar el contenido que trae por defecto y pegar TODO lo de abajo
+     (desde <!DOCTYPE hasta el </html> final).
+  3. Guardar.
+  4. Authentication → URL Configuration → agregar a "Redirect URLs":
+       https://TU-DOMINIO/auth/callback
+     (y si probás en local: http://localhost:3000/auth/callback).
+     Sin este paso Supabase rechaza la redirección y el link no funciona,
+     aunque el mail se vea bien.
+
+  {{ .ConfirmationURL }} es una variable de Supabase: la arma automático
+  con el link firmado que apunta a /auth/callback (una vez que ese
+  Redirect URL esté permitido). No se toca.
+-->
+<!DOCTYPE html>
+<html lang="es">
+  <body style="margin:0;padding:0;background-color:#131316;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#131316;padding:32px 16px;">
+      <tr>
+        <td align="center">
+          <table role="presentation" width="100%" style="max-width:480px;background-color:#1c1c21;border-radius:16px;overflow:hidden;">
+            <tr>
+              <td style="padding:32px 32px 24px;text-align:center;">
+                <div style="font-size:20px;font-weight:800;letter-spacing:-0.02em;color:#ffffff;">
+                  No Te Afanen
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:0 32px 8px;">
+                <h1 style="margin:0 0 12px;font-size:22px;line-height:1.3;color:#ffffff;font-weight:700;">
+                  Confirmá tu mail
+                </h1>
+                <p style="margin:0 0 24px;font-size:15px;line-height:1.5;color:#b4b4bb;">
+                  Ya casi está. Tocá el botón de abajo para confirmar tu cuenta y arrancar a comparar precios
+                  y ahorrar en tus compras de todos los días.
+                </p>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:0 32px 28px;text-align:center;">
+                <a
+                  href="{{ .ConfirmationURL }}"
+                  style="display:inline-block;background-color:#6d5cf0;color:#ffffff;font-size:15px;font-weight:700;
+                         text-decoration:none;padding:14px 28px;border-radius:12px;"
+                >
+                  Confirmar mi cuenta
+                </a>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:0 32px 32px;">
+                <p style="margin:0;font-size:13px;line-height:1.5;color:#7a7a82;">
+                  Si el botón no funciona, copiá y pegá este link en el navegador:<br />
+                  <a href="{{ .ConfirmationURL }}" style="color:#8f83f3;word-break:break-all;">{{ .ConfirmationURL }}</a>
+                </p>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:20px 32px;border-top:1px solid #2a2a30;text-align:center;">
+                <p style="margin:0;font-size:12px;line-height:1.5;color:#5c5c63;">
+                  Si vos no creaste esta cuenta, podés ignorar este mail sin problema.
+                </p>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>
