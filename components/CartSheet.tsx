@@ -233,6 +233,7 @@ export default function CartSheet({
   onDecrement,
   onCompareNow,
   onMergeCart,
+  onClearCart,
   pricesAgeLabel,
 }: {
   open: boolean;
@@ -244,6 +245,7 @@ export default function CartSheet({
   onDecrement: (id: string) => void;
   onCompareNow: () => void;
   onMergeCart: (cart: StoredCart) => void;
+  onClearCart?: () => void;
   pricesAgeLabel?: string | null;
 }) {
   const { chosenEntries, order, complete } = cartStats(selected, productIndex, stores);
@@ -259,6 +261,19 @@ export default function CartSheet({
         <div className="cart-sheet-head">
           <h3>Tu carrito</h3>
           <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            {chosenEntries.length > 0 && onClearCart && (
+              <button
+                type="button"
+                className="cart-sheet-clear-btn"
+                onClick={() => {
+                  if (window.confirm('¿Vaciar el carrito? Se van a sacar todos los productos.')) {
+                    onClearCart();
+                  }
+                }}
+              >
+                Vaciar
+              </button>
+            )}
             <CartShareButton selected={selected} productIndex={productIndex} hasItems={chosenEntries.length > 0} />
             <button className="cart-sheet-close" aria-label="Cerrar" onClick={onClose}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round">

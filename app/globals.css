@@ -644,6 +644,11 @@
     display:flex;align-items:center;justify-content:center;cursor:pointer;transition:background .15s ease, color .15s ease;
   }
   .cart-sheet-close:hover{background:var(--chip-bg);color:var(--ink);}
+  .cart-sheet-clear-btn{
+    border:none;background:none;color:var(--ink-soft);font-size:12px;font-weight:700;
+    padding:7px 8px;cursor:pointer;white-space:nowrap;transition:color .15s ease;
+  }
+  .cart-sheet-clear-btn:hover{color:#c0392b;}
   .cart-sheet-share-btn{
     display:flex;align-items:center;gap:5px;border:1px solid var(--line);border-radius:999px;
     background:none;color:var(--ink-soft);font-size:12px;font-weight:700;padding:7px 12px;cursor:pointer;

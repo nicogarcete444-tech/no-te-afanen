@@ -783,6 +783,12 @@ export default function StoreApp({
     popBadge();
   }
 
+  // "Vaciar carrito": saca todos los productos de un toque (con confirmación
+  // en el propio CartSheet, así un toque de más no borra el changuito).
+  function clearCart() {
+    setSelected({});
+  }
+
   // Cargar un "changuito guardado": suma sus productos al carrito actual
   // (no lo reemplaza) y respeta el mismo tope de productos distintos del
   // plan free que rige al agregar cualquier producto uno por uno — si no,
@@ -1494,6 +1500,7 @@ export default function StoreApp({
         onDecrement={decrementQty}
         onCompareNow={handleCompareNow}
         onMergeCart={handleMergeCartTemplate}
+        onClearCart={clearCart}
         pricesAgeLabel={pricesAgeLabel}
       />
 
