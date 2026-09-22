@@ -417,8 +417,14 @@ export default function StoreApp({
         // Si la posición real cae cerca del fallback (AMBA, en la práctica
         // el grueso de las visitas), no vale la pena recargar catálogo,
         // sucursales y búsquedas por una diferencia que no va a cambiar
-        // resultados — solo el parpadeo de "vuelve a cargar todo".
-        if (roughKm(BA_FALLBACK, real) < 30) return;
+        // resultados — solo el parpadeo de "vuelve a cargar todo". Pero la
+        // ubicación SÍ está activa, así que hay que sacar el cartel de
+        // "activá la ubicación" (antes se quedaba pegado para siempre en
+        // este caso, aunque el permiso ya estaba dado).
+        if (roughKm(BA_FALLBACK, real) < 30) {
+          setStoresStatus('');
+          return;
+        }
         setCoords(real);
         loadStores(real.lat, real.lng, false);
       },
