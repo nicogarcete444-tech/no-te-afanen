@@ -496,24 +496,6 @@
   .scan-manual input:focus{border-color:var(--ink);}
   .scan-manual .cta-btn{padding:10px 18px;}
 
-  .chip-row{
-    display:flex;gap:8px;overflow-x:auto;padding:20px 2px 10px;
-    /* Se sigue deslizando con el dedo, pero sin la barrita de scroll de abajo. */
-    scrollbar-width:none;-webkit-overflow-scrolling:touch;
-  }
-  .chip-row::-webkit-scrollbar{display:none;}
-  /* Chip de rubro: píldora de texto, sin icono. */
-  .chip{
-    /* font-family explícita: los chips ahora son <button> y el navegador les
-       pone su fuente por defecto si no se la pisás. */
-    flex-shrink:0;font-size:13px;font-weight:600;color:var(--ink-soft);font-family:var(--font-inter),sans-serif;
-    background:var(--surface-2);border:none;cursor:pointer;white-space:nowrap;
-    padding:10px 16px;border-radius:999px;line-height:1.2;
-    transition:background .15s ease, transform .1s ease;
-  }
-  .chip:active{transform:scale(.96);}
-  .chip.active{background:var(--accent-wash);color:var(--ink);font-weight:700;}
-
   .list-header{display:flex;justify-content:space-between;align-items:center;margin:34px 0 4px;gap:10px;flex-wrap:nowrap;}
   .list-header h2{font-size:17px;letter-spacing:-0.03em;margin:0;min-width:0;flex:1 1 auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   .list-header-right{display:flex;align-items:center;gap:10px;margin-left:auto;flex-shrink:0;}
@@ -758,27 +740,6 @@
   .cart-sheet-total .label{font-size:12.5px;color:var(--ink-soft);}
   .cart-sheet-total .val{font-family:var(--font-archivo),sans-serif;font-size:17px;font-weight:800;color:var(--purple-2);font-variant-numeric:tabular-nums;}
   .cart-sheet-footnote{font-size:11px;color:var(--ink-faint);text-align:center;margin-top:10px;}
-
-  /* gráfico de barras del historial mensual de ahorros */
-  .savings-chart{
-    display:flex;align-items:flex-end;gap:8px;height:150px;margin-top:8px;padding:0 2px;
-  }
-  .savings-chart-col{
-    flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;
-    height:100%;min-width:0;
-  }
-  .savings-chart-val{font-size:11px;font-weight:700;color:var(--ink);font-variant-numeric:tabular-nums;margin-bottom:4px;white-space:nowrap;}
-  .savings-chart-track{
-    width:100%;max-width:30px;flex:1;display:flex;align-items:flex-end;
-    background:var(--chip-bg);border:none;border-radius:14px;overflow:hidden;
-  }
-  .savings-chart-bar{
-    width:100%;background:var(--ink-faint);border-radius:14px;
-    transition:height .4s cubic-bezier(.2,.85,.25,1);
-  }
-  .savings-chart-bar.current{background:var(--check-green);}
-  .savings-chart-bar.worst{background:var(--coral);}
-  .savings-chart-label{font-size:10.5px;color:var(--ink-soft);margin-top:6px;text-align:center;}
 
   /* ficha de producto (pantalla completa) — mejor precio, promedio y
      precio por súper, en el formato pedido. */
@@ -1432,7 +1393,6 @@
   scroll-margin-top:118px;
 }
 .compare-sub{font-size:13px;color:var(--ink-soft);margin:10px 0 18px;max-width:440px;line-height:1.5;}
-.savings-chart-track{background:var(--surface-2);}
 .empty-state{padding:52px 16px;}
 .skeleton{border-bottom:1px solid var(--line);padding:20px 0;}
 

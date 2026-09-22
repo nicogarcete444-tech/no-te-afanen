@@ -37,45 +37,57 @@ async function buildComparison(pool: LiveItem[], stores: NearbyStore[]): Promise
 
   const details = await mapWithConcurrency(eans, 4, (ean) => fetchStorePriceDetails(ean, stores));
 
-  // Los 4 súpers con más productos con precio (si hay empate, el orden en que
-  // ya vienen: primero las cadenas nacionales grandes).
+  // Cadenas ordenadas por cuántos productos de la canasta tienen precio
+  // (si hay empate, el orden en que ya vienen: primero las cadenas
+  // nacionales grandes).
   const chains = stores.map((s) => s.chain);
-  const chosen = chains
+  const countsByChain = chains
     .map((chain, i) => ({
       chain,
       i,
       n: details.filter((d) => typeof d?.[chain]?.precio === 'number').length,
     }))
-    .sort((a, b) => b.n - a.n || a.i - b.i)
-    .slice(0, CHAINS_SHOWN)
-    .map((c) => c.chain);
-  if (chosen.length < 2) return null;
+    .sort((a, b) => b.n - a.n || a.i - b.i);
 
-  // Solo cuentan los productos que tienen precio en TODOS los súpers elegidos:
-  // si no, un súper parecería más barato solo por tener menos productos cargados.
-  const basket = details.filter(
-    (d): d is Record<string, StorePriceDetail> => !!d && chosen.every((chain) => typeof d[chain]?.precio === 'number')
-  );
-  if (basket.length < BASKET_MIN) return null;
+  // Se prueba primero con CHAINS_SHOWN cadenas y, si la intersección de
+  // precios no alcanza, con una menos, y así hasta 2. Antes se probaba
+  // ÚNICAMENTE con 4 cadenas fijas: si la cuarta tenía pocos precios
+  // cargados ese día (algo que varía solo, según qué actualizó Precios
+  // Claros), la intersección se quedaba corta y la comparación entera
+  // desaparecía — aunque las primeras 2 o 3 cadenas de sobra tuvieran datos
+  // para comparar. Por eso a veces salía y a veces no.
+  for (let n = Math.min(CHAINS_SHOWN, countsByChain.length); n >= 2; n--) {
+    const chosen = countsByChain.slice(0, n).map((c) => c.chain);
 
-  const totals = chosen
-    .map((chain) => ({ chain, total: basket.reduce((sum, d) => sum + d[chain].precio, 0) }))
-    .sort((a, b) => a.total - b.total);
-  const min = totals[0].total;
-  const maxTotal = totals[totals.length - 1].total;
+    // Solo cuentan los productos que tienen precio en TODAS las cadenas
+    // elegidas: si no, una cadena parecería más barata solo por tener menos
+    // productos cargados.
+    const basket = details.filter(
+      (d): d is Record<string, StorePriceDetail> => !!d && chosen.every((chain) => typeof d[chain]?.precio === 'number')
+    );
+    if (basket.length < BASKET_MIN) continue;
 
-  return {
-    rows: totals.map((t) => ({
-      key: t.chain,
-      chain: t.chain,
-      total: t.total,
-      isBest: t.total === min,
-      diff: t.total - min,
-      estimated: false,
-    })),
-    maxTotal,
-    basketSize: basket.length,
-  };
+    const totals = chosen
+      .map((chain) => ({ chain, total: basket.reduce((sum, d) => sum + d[chain].precio, 0) }))
+      .sort((a, b) => a.total - b.total);
+    const min = totals[0].total;
+    const maxTotal = totals[totals.length - 1].total;
+
+    return {
+      rows: totals.map((t) => ({
+        key: t.chain,
+        chain: t.chain,
+        total: t.total,
+        isBest: t.total === min,
+        diff: t.total - min,
+        estimated: false,
+      })),
+      maxTotal,
+      basketSize: basket.length,
+    };
+  }
+
+  return null;
 }
 
 type State =

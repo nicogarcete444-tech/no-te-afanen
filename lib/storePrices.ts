@@ -17,6 +17,51 @@ export type NearbyStore = {
   sucursalId: string; // id compuesto que Precios Claros ya devuelve armado ("comercioId-banderaId-sucursalId")
 };
 
+// --- Nombre de producto directo desde Precios Claros (fallback del escáner) -
+// Open Food Facts no tiene cargados muchos productos regionales/de marca
+// chica. Antes de rendirnos y decirle al usuario "no pudimos identificar el
+// código", probamos /api/producto con el EAN escaneado como id_producto (en
+// Precios Claros el id del producto suele ser el mismo EAN) contra las
+// sucursales cercanas: si alguna lo tiene cargado, la respuesta trae el
+// nombre real del producto y nos ahorramos pasar por Open Food Facts.
+// No sabemos de antemano con qué claves exactas viene el nombre en esa
+// respuesta (no es la misma forma que /api/productos), así que probamos
+// varias variantes razonables tanto en la raíz como por sucursal.
+function pickName(obj: any): { nombre: string; marca: string } | null {
+  if (!obj || typeof obj !== 'object') return null;
+  const nombre = (obj.nombre ?? obj.nombreProducto ?? obj.descripcion ?? obj?.producto?.nombre ?? '')
+    .toString()
+    .trim();
+  if (!nombre) return null;
+  const marca = (obj.marca ?? obj.marcaProducto ?? obj?.producto?.marca ?? '').toString().trim();
+  return { nombre, marca };
+}
+
+export async function getProductNameFromPreciosClaros(
+  ean: string,
+  stores: NearbyStore[]
+): Promise<string | null> {
+  if (!ean || !stores.length) return null;
+  try {
+    const ids = stores.map((s) => s.sucursalId).join(',');
+    const res = await fetch(
+      `/api/producto?id_producto=${encodeURIComponent(ean)}&array_sucursales=${encodeURIComponent(ids)}&limit=${stores.length}`,
+      { cache: 'no-store' }
+    );
+    if (!res.ok) return null;
+    const data = await res.json();
+
+    const found = pickName(data) || (data?.sucursales || []).map(pickName).find((n: any) => n);
+    if (!found) return null;
+
+    return found.marca && !found.nombre.toLowerCase().includes(found.marca.toLowerCase())
+      ? `${found.marca} ${found.nombre}`
+      : found.nombre;
+  } catch {
+    return null;
+  }
+}
+
 // 6 en vez de 4: con solo 4 candidatas, apenas una o dos no tenían cargado
 // el precio de un producto puntual en Precios Claros, la comparación
 // quedaba en 2 súpers (o menos) aunque hubiera más cadenas grandes cerca.

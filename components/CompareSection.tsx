@@ -8,8 +8,7 @@ import { addSaving } from '@/lib/savingsHistory';
 import { buildShareCardCanvas, shareOrDownloadCard } from '@/lib/shareCard';
 import { LiveItem } from '@/lib/liveItems';
 import { NearbyStore } from '@/lib/storePrices';
-import StoreLogo from './StoreLogo';
-import StoreTotalRows from './StoreTotalRows';
+import StoreTotalRows, { TotalRow } from './StoreTotalRows';
 import GeneralCompare from './GeneralCompare';
 
 // Arma el texto de la lista de compras: cada producto con su precio y el
@@ -157,9 +156,20 @@ export default function CompareSection({
     .filter((i) => globalIdx.avgOverpayPct[i] != null)
     .sort((a, b) => (globalIdx.avgOverpayPct[a] as number) - (globalIdx.avgOverpayPct[b] as number));
   const hasGlobalChart = chosenEntries.length === 0 && globalIdx.sampleSize >= 3 && globalOrder.length >= 2;
-  const globalMaxPct = hasGlobalChart
-    ? Math.max(1, ...globalOrder.map((i) => globalIdx.avgOverpayPct[i] as number))
-    : 1;
+  // Filas en el mismo formato que usa StoreTotalRows (imagen de "Dónde
+  // conviene hoy" con canasta real): así el panorama histórico se ve
+  // igual que la comparación real en vez de un gráfico de barras distinto.
+  const globalRows: TotalRow[] = hasGlobalChart
+    ? globalOrder.map((si, pos) => ({
+        key: si,
+        chain: stores[si],
+        total: globalIdx.avgOverpayPct[si] as number,
+        isBest: pos === 0,
+        diff: (globalIdx.avgOverpayPct[si] as number) - (globalIdx.avgOverpayPct[globalOrder[0]] as number),
+        estimated: false,
+      }))
+    : [];
+  const globalMaxTotal = Math.max(1, ...globalRows.map((r) => r.total));
 
   const [copyStatus, setCopyStatus] = useState<'idle' | 'ok' | 'error'>('idle');
   const copyTimeout = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -246,47 +256,24 @@ export default function CompareSection({
           pool={generalPool ?? []}
           stores={generalStores ?? []}
           fallback={
-            <>
-      {!hasGlobalChart && (
-        <div className="compare-sub">Agregá productos al carrito para ver en qué súper te conviene comprarlos.</div>
-      )}
-
-      {hasGlobalChart && (
-        <div className="savings-chart">
-          {globalOrder.map((si, pos) => {
-            const pct = globalIdx.avgOverpayPct[si] as number;
-            const isBest = si === globalOrder[0];
-            const isWorst = pos === globalOrder.length - 1 && pct > 0;
-            // La barra representa qué tan buen precio es, no cuánto se
-            // sobrepaga: el mejor precio queda con la barra llena y el
-            // resto se achica a medida que se aleja del mejor precio.
-            const heightPct = Math.max(4, 100 - Math.round((pct / globalMaxPct) * 100));
-            return (
-              <div className="savings-chart-col" key={si}>
-                <div
-                  className="savings-chart-val"
-                  style={{
-                    color: isBest ? 'var(--check-green)' : isWorst ? 'var(--up)' : undefined,
-                    fontWeight: isBest || isWorst ? 700 : undefined,
-                  }}
-                >
-                  {isBest ? 'Mejor precio' : `+${Math.round(pct)}%`}
+            hasGlobalChart ? (
+              <>
+                <div className="compare-sub">
+                  Panorama general según los productos que ya viste — agregá al carrito para compararlo con tu canasta real.
                 </div>
-                <div className="savings-chart-track">
-                  <div
-                    className={`savings-chart-bar${isBest ? ' current' : isWorst ? ' worst' : ''}`}
-                    style={{ height: `${heightPct}%` }}
+                <div className="dc-card">
+                  <StoreTotalRows
+                    rows={globalRows}
+                    maxTotal={globalMaxTotal}
+                    formatAmount={(row) => ({
+                      main: row.isBest ? 'Mejor precio' : `+${Math.round(row.total)}%`,
+                    })}
                   />
                 </div>
-                <div className="savings-chart-label">
-                  <StoreLogo chain={stores[si]} size={16} />
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-            </>
+              </>
+            ) : (
+              <div className="compare-sub">Agregá productos al carrito para ver en qué súper te conviene comprarlos.</div>
+            )
           }
         />
       )}

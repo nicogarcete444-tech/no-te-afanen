@@ -30,7 +30,7 @@ import { extractEan, groupLiveItems, LiveItem, normalizeEan, SortOrder } from '@
 import { getProductImageUrl, getProductNameByEan, photoLookupName, resolveSearchableName } from '@/lib/productImage';
 import CategoryProductList from './CategoryProductList';
 import CatalogFilters from './CatalogFilters';
-import { fetchNearbyStores, NearbyStore } from '@/lib/storePrices';
+import { fetchNearbyStores, getProductNameFromPreciosClaros, NearbyStore } from '@/lib/storePrices';
 import { formatCacheAge, loadCatalogCache, saveCatalogCache } from '@/lib/catalogCache';
 import CompareSection from './CompareSection';
 import NearbyDealsFeed from './NearbyDealsFeed';
@@ -48,6 +48,29 @@ const CartSheet = dynamic(() => import('./CartSheet'));
 const BarcodeScanner = dynamic(() => import('./BarcodeScanner'));
 const SavingsHistoryModal = dynamic(() => import('./SavingsHistoryModal'));
 const PremiumModal = dynamic(() => import('./PremiumModal'));
+
+// Punto fijo en Buenos Aires: se usa como arranque inmediato de `coords` (ver
+// más abajo) y como respaldo si el navegador no da ubicación real. La API de
+// Precios Claros exige lat/lng sí o sí, así que sin esto no había forma de
+// pedir un solo producto sin ubicación.
+const BA_FALLBACK = { lat: -34.6037, lng: -58.3816 };
+
+// Distancia aproximada en km entre dos puntos (fórmula haversine, sin
+// precisión de más: acá solo hace falta decidir si vale la pena recargar el
+// catálogo, no navegar un barco). Se usa para NO recargar todo cuando la
+// ubicación real que trae el navegador cae cerca del fallback de Buenos
+// Aires (el grueso de las visitas, dado el AMBA): en ese caso los resultados
+// iban a salir prácticamente iguales, así que mejor evitar el parpadeo de
+// "vuelve a cargar" y quedarse con lo que ya se pintó.
+function roughKm(a: { lat: number; lng: number }, b: { lat: number; lng: number }): number {
+  const R = 6371;
+  const dLat = ((b.lat - a.lat) * Math.PI) / 180;
+  const dLng = ((b.lng - a.lng) * Math.PI) / 180;
+  const s =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((a.lat * Math.PI) / 180) * Math.cos((b.lat * Math.PI) / 180) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(s));
+}
 
 // De cada rubro del inicio (ver HOME_TEASER_QUERIES) llegan varios
 // candidatos, no uno solo (ver el comentario de HOME_TEASER_RESULTS_PER_QUERY
@@ -284,7 +307,17 @@ export default function StoreApp({
 
   const [nearbyStores, setNearbyStores] = useState<NearbyStore[]>([]);
   const [storesStatus, setStoresStatus] = useState('');
-  const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
+  // Arranca en Buenos Aires y NO en null: antes esto se quedaba en null hasta
+  // que resolvía navigator.geolocation.getCurrentPosition, y como el efecto
+  // de acá abajo que carga el catálogo corta con `if (!coords) return`, la
+  // vidriera entera quedaba esperando el cartel de permiso de ubicación —
+  // hasta 6 segundos (el timeout de abajo) si el usuario no contestaba
+  // rápido, o directamente colgada si el navegador nunca disparaba el
+  // callback. Arrancando ya con Buenos Aires, el catálogo pide productos
+  // de una, y si después llega una ubicación real, se pisa sola (ver el
+  // efecto de geolocalización) y todo lo que depende de `coords` se
+  // actualiza solo.
+  const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(BA_FALLBACK);
 
   const searchDebounce = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const saveDebounce = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -356,13 +389,12 @@ export default function StoreApp({
   }, []);
 
   // sucursales cercanas para poder comparar precios reales por cadena en la
-  // búsqueda en vivo. Si el usuario no da permiso de ubicación, usamos un
-  // punto fijo en Buenos Aires para que la función igual sirva de algo.
+  // búsqueda en vivo. `coords` ya arranca en BA_FALLBACK (ver su useState más
+  // arriba), así que esto pide las sucursales de Buenos Aires DE UNA, sin
+  // esperar el permiso de ubicación. Si el navegador después da una posición
+  // real, se pisa sola: nada de lo de arriba se bloquea mientras tanto.
   useEffect(() => {
-    const BA_FALLBACK = { lat: -34.6037, lng: -58.3816 };
-
     function loadStores(lat: number, lng: number, usedFallback: boolean) {
-      setCoords({ lat, lng });
       fetchNearbyStores(lat, lng)
         .then((stores) => {
           setNearbyStores(stores);
@@ -375,14 +407,25 @@ export default function StoreApp({
         .catch(() => setStoresStatus('No se pudo cargar la lista de súper cercanos.'));
     }
 
-    if (!navigator.geolocation) {
-      loadStores(BA_FALLBACK.lat, BA_FALLBACK.lng, true);
-      return;
-    }
+    loadStores(BA_FALLBACK.lat, BA_FALLBACK.lng, true);
+
+    if (!navigator.geolocation) return;
 
     navigator.geolocation.getCurrentPosition(
-      (pos) => loadStores(pos.coords.latitude, pos.coords.longitude, false),
-      () => loadStores(BA_FALLBACK.lat, BA_FALLBACK.lng, true),
+      (pos) => {
+        const real = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+        // Si la posición real cae cerca del fallback (AMBA, en la práctica
+        // el grueso de las visitas), no vale la pena recargar catálogo,
+        // sucursales y búsquedas por una diferencia que no va a cambiar
+        // resultados — solo el parpadeo de "vuelve a cargar todo".
+        if (roughKm(BA_FALLBACK, real) < 30) return;
+        setCoords(real);
+        loadStores(real.lat, real.lng, false);
+      },
+      () => {
+        // Ya se pintó con el fallback de Buenos Aires; sin permiso no hay
+        // nada más que hacer.
+      },
       { timeout: 6000 }
     );
   }, []);
@@ -642,7 +685,16 @@ export default function StoreApp({
     setLiveLoading(true);
     setLiveStatus('Identificando el producto escaneado...');
 
-    const name = await getProductNameByEan(trimmed);
+    let name = await getProductNameByEan(trimmed);
+
+    // Open Food Facts no lo tiene: antes de darlo por perdido, probamos
+    // directo contra Precios Claros con el código como id_producto en las
+    // sucursales cercanas (cubre productos regionales que OFF no tiene
+    // cargados pero que sí están en la base oficial).
+    if (!name && coords && nearbyStores.length) {
+      name = await getProductNameFromPreciosClaros(trimmed, nearbyStores);
+    }
+
     if (name && coords) {
       // El nombre de Open Food Facts (marca + producto) a veces trae una
       // palabra de más que Precios Claros no matchea; esto prueba versiones
@@ -669,8 +721,10 @@ export default function StoreApp({
     // esta función deja de cambiar en cada render de StoreApp. Importa porque
     // BarcodeScanner la tiene en las dependencias del efecto que arranca la
     // cámara — antes, cualquier re-render (y hay muchos: el catálogo llega de
-    // a tandas) reiniciaba la cámara en el medio del escaneo.
-  }, [coords]);
+    // a tandas) reiniciaba la cámara en el medio del escaneo. nearbyStores
+    // solo cambia una vez (cuando llegan las sucursales cercanas al
+    // arrancar), así que esto no reintroduce ese problema.
+  }, [coords, nearbyStores]);
 
   function popBadge() {
     setCartPop(false);

@@ -9,7 +9,7 @@ import { StoredCart } from '@/lib/cart';
 import { CartTemplate, deleteTemplate, listTemplates, saveTemplate } from '@/lib/cartTemplates';
 import { buildShareUrl } from '@/lib/sharedCart';
 
-function CartItemPhoto({ id, name, ca, cb, icon }: { id: string; name: string; ca: string; cb: string; icon: string }) {
+function CartItemPhoto({ id, name, ca, cb }: { id: string; name: string; ca: string; cb: string }) {
   const [url, setUrl] = useState<string | null>(null);
 
   useEffect(() => {
@@ -46,8 +46,14 @@ function CartItemPhoto({ id, name, ca, cb, icon }: { id: string; name: string; c
 
   return (
     <div className="cart-item-media" style={{ ['--media-a' as any]: ca, ['--media-b' as any]: cb }}>
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round"
-        dangerouslySetInnerHTML={{ __html: icon }} />
+      {/* El campo Product.icon (paths SVG en texto) nunca se llena hoy — todo el
+          código lo inicializa en '' — así que inyectarlo con
+          dangerouslySetInnerHTML no dibujaba nada, pero dejaba la puerta
+          abierta: el día que alguien lo cargue desde una fuente externa (API,
+          carrito compartido), es un XSS servido en bandeja. Se saca la
+          inyección; si en el futuro hace falta un ícono acá, que sea un
+          switch de paths fijos como en CategoryIcon.tsx, nunca HTML crudo. */}
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" />
     </div>
   );
 }
@@ -275,7 +281,7 @@ export default function CartSheet({
                 return (
                   <div className="cart-item" key={p.id}>
                     <div className="cart-item-left">
-                      <CartItemPhoto id={p.id} name={p.name} ca={ca} cb={cb} icon={p.icon} />
+                      <CartItemPhoto id={p.id} name={p.name} ca={ca} cb={cb} />
                       <div>
                         <div className="cart-item-name">{p.name}</div>
                         <div className="cart-item-price">
