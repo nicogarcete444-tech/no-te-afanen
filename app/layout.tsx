@@ -25,18 +25,21 @@ const inter = Inter({
   display: 'swap',
 });
 
+const TITLE = 'No Te Afanen';
+const DESCRIPTION = 'Comparador de precios de supermercados en Argentina';
+
 export const metadata: Metadata = {
   // metadataBase resuelve a absolutas todas las URLs relativas de metadata
   // (canonical, og:image, manifest). Sin esto Next avisa por consola en el
   // build y los buscadores reciben rutas relativas, que ignoran.
   metadataBase: new URL(SITE_URL),
-  title: 'No Te Afanen',
-  description: 'Comparador de precios de supermercados en Argentina',
+  title: TITLE,
+  description: DESCRIPTION,
   manifest: '/manifest.json',
   appleWebApp: {
     capable: true,
     statusBarStyle: 'default',
-    title: 'No Te Afanen',
+    title: TITLE,
   },
   icons: {
     icon: [
@@ -46,6 +49,27 @@ export const metadata: Metadata = {
     ],
     shortcut: ['/favicon.ico'],
     apple: [{ url: '/icons/apple-touch-icon.png', sizes: '180x180', type: 'image/png' }],
+  },
+  // Sin esto, compartir un link en WhatsApp/Telegram/Twitter mostraba una
+  // tarjeta pelada (sin imagen, con el título genérico del dominio) — justo
+  // el canal por el que más se comparte esta app (mandarle a alguien "mirá
+  // cuánto sale más barato acá"). `hero-cart.webp` ya existe en /public y
+  // tiene proporción cercana a la estándar de 1200x630 que usan estas
+  // plataformas.
+  openGraph: {
+    title: TITLE,
+    description: DESCRIPTION,
+    url: SITE_URL,
+    siteName: TITLE,
+    locale: 'es_AR',
+    type: 'website',
+    images: [{ url: '/hero-cart.webp', width: 1200, height: 623, alt: TITLE }],
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: TITLE,
+    description: DESCRIPTION,
+    images: ['/hero-cart.webp'],
   },
 };
 

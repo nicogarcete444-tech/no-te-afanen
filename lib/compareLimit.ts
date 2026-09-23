@@ -2,12 +2,23 @@ import { createClient } from '@/lib/supabase/client';
 
 // Tope de veces por semana que una cuenta free puede usar "Comparar ahora"
 // (ver el resto de la explicación en supabase/schema.sql, tabla
-// compare_usage). Invitados (sin cuenta) también caen acá, igual que con
-// el tope del carrito en lib/premium.ts.
+// compare_usage). El límite en sí se aplica y se cuenta del lado del server
+// (register_compare_use en supabase/schema.sql) — este archivo no guarda ni
+// decide nada por su cuenta, solo llama al RPC y devuelve lo que contesta.
 export const FREE_COMPARE_LIMIT = 3;
+
+// "Comparar ahora" pide cuenta. Antes los invitados (sin login) tenían su
+// propio contador en localStorage — no era una cuota real: se reseteaba
+// solo con abrir una ventana de incógnito o borrar los datos del sitio, así
+// que cualquiera podía usarla sin límite. Se sacó junto con el resto de la
+// lógica de localStorage de este archivo; sin una sesión no hay forma
+// honesta de atarle un tope a nadie del lado del server.
 
 // Lunes de la semana de `date`, como "YYYY-MM-DD" en hora local (no UTC,
 // para que la semana cambie a la medianoche del usuario y no a la de UTC).
+// Se usa solo para mostrar/depurar en el cliente — quien decide de verdad
+// en qué semana cae un uso es register_compare_use, calculado en el server
+// a partir del offset horario (ver más abajo), no de esta fecha.
 export function getWeekStart(date: Date = new Date()): string {
   const day = date.getDay(); // 0 = domingo … 6 = sábado
   const diffToMonday = day === 0 ? -6 : 1 - day;
@@ -20,45 +31,14 @@ export function getWeekStart(date: Date = new Date()): string {
   return `${y}-${m}-${d}`;
 }
 
-type GuestUsage = { weekStart: string; count: number };
-
-const GUEST_COMPARE_KEY = 'noteafanen_guest_compare_usage';
-
-function loadGuestUsage(): GuestUsage {
-  const weekStart = getWeekStart();
-  if (typeof window === 'undefined') return { weekStart, count: 0 };
-  try {
-    const raw = window.localStorage.getItem(GUEST_COMPARE_KEY);
-    if (!raw) return { weekStart, count: 0 };
-    const parsed = JSON.parse(raw);
-    // si cambió la semana, el contador vuelve a 0 (no hace falta borrar
-    // nada, simplemente se ignora lo guardado de la semana anterior)
-    if (parsed.weekStart !== weekStart) return { weekStart, count: 0 };
-    return { weekStart, count: Number(parsed.count) || 0 };
-  } catch {
-    return { weekStart, count: 0 };
-  }
-}
-
-function saveGuestUsage(usage: GuestUsage): void {
-  if (typeof window === 'undefined') return;
-  try {
-    window.localStorage.setItem(GUEST_COMPARE_KEY, JSON.stringify(usage));
-  } catch {
-    // si el navegador bloquea localStorage no hay mucho para hacer acá;
-    // en el peor caso el invitado no queda limitado, no es grave.
-  }
-}
-
-// Comparaciones ya "pagadas": si el usuario ya gastó un uso para ver ESTE
-// carrito en ESTA semana, recargar la página o volver más tarde no le
-// cobra otro. Sin esto, con solo 3 usos por semana, un F5 sin querer le
-// come un tercio de la cuota — y el usuario no está pidiendo nada nuevo,
-// es la misma comparación que ya desbloqueó.
-const REVEALED_KEY = 'noteafanen_compare_revealed';
-
 // Firma del carrito: qué productos y en qué cantidad. Si el usuario agrega
-// o saca algo, es una comparación distinta y sí corresponde cobrarla.
+// o saca algo, es una comparación distinta y sí corresponde cobrarla. Se
+// manda al RPC (`p_signature`) para que el server pueda reconocer "este
+// carrito ya se desbloqueó esta semana" y no cobrar de nuevo al recargar la
+// página — antes eso vivía en localStorage (wasAlreadyRevealed/
+// markRevealed); ahora la garantía la da la fila de compare_usage, y vale
+// para la cuenta en cualquier dispositivo, no solo en el navegador donde se
+// tocó "Comparar ahora" la primera vez.
 export function cartSignature(items: Record<string, number>): string {
   return Object.entries(items)
     .filter(([, qty]) => qty > 0)
@@ -67,47 +47,11 @@ export function cartSignature(items: Record<string, number>): string {
     .join('|');
 }
 
-export function wasAlreadyRevealed(signature: string): boolean {
-  if (typeof window === 'undefined' || !signature) return false;
-  try {
-    const raw = window.localStorage.getItem(REVEALED_KEY);
-    if (!raw) return false;
-    const parsed = JSON.parse(raw);
-    return parsed.weekStart === getWeekStart() && Array.isArray(parsed.signatures)
-      ? parsed.signatures.includes(signature)
-      : false;
-  } catch {
-    return false;
-  }
-}
-
-export function markRevealed(signature: string): void {
-  if (typeof window === 'undefined' || !signature) return;
-  try {
-    const weekStart = getWeekStart();
-    const raw = window.localStorage.getItem(REVEALED_KEY);
-    let signatures: string[] = [];
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (parsed.weekStart === weekStart && Array.isArray(parsed.signatures)) {
-        signatures = parsed.signatures;
-      }
-    }
-    if (!signatures.includes(signature)) signatures.push(signature);
-    // nunca hace falta guardar más firmas que usos hay en la semana
-    window.localStorage.setItem(
-      REVEALED_KEY,
-      JSON.stringify({ weekStart, signatures: signatures.slice(-FREE_COMPARE_LIMIT) })
-    );
-  } catch {
-    // sin localStorage el usuario simplemente vuelve a gastar un uso al
-    // recargar; molesto, pero no rompe nada.
-  }
-}
-
-// Cuántas veces ya comparó en la semana en curso.
+// Cuántas veces ya comparó en la semana en curso. Solo para mostrar "te
+// quedan N" antes de tocar el botón — el chequeo que de verdad importa pasa
+// por registerCompareUse.
 export async function getCompareUsage(userId: string | null): Promise<number> {
-  if (!userId) return loadGuestUsage().count;
+  if (!userId) return 0;
 
   const supabase = createClient();
   const { data } = await supabase
@@ -120,31 +64,43 @@ export async function getCompareUsage(userId: string | null): Promise<number> {
   return data?.count ?? 0;
 }
 
-// Suma un uso y devuelve el nuevo total de la semana. Se llama justo antes
-// de mostrarle al usuario el desglose por súper (no antes: si algo falla en
-// el medio, mejor no haber gastado un uso de arriba).
-export async function registerCompareUse(userId: string | null): Promise<number> {
-  const weekStart = getWeekStart();
+// Suma un uso y devuelve si el server lo permitió, más el total actualizado
+// de la semana. Se llama ANTES de mostrar el desglose (no después): la
+// revelación depende de lo que este RPC conteste, no de un cálculo hecho en
+// el navegador — ver register_compare_use en supabase/schema.sql para el
+// resto (evitar semanas inventadas, carreras entre dos pestañas, y el
+// dedupe de "mismo carrito, no cobrar de nuevo").
+export type CompareUseResult = { allowed: boolean; count: number };
 
+export async function registerCompareUse(
+  userId: string | null,
+  signature: string
+): Promise<CompareUseResult> {
   if (!userId) {
-    const usage = loadGuestUsage();
-    const next = { weekStart, count: usage.count + 1 };
-    saveGuestUsage(next);
-    return next.count;
+    // Sin cuenta no hay identidad que el server pueda validar — no se le da
+    // una revelación gratis solo porque el cliente lo pida.
+    return { allowed: false, count: 0 };
   }
 
   const supabase = createClient();
-  const current = await getCompareUsage(userId);
-  const next = current + 1;
+  // getTimezoneOffset() da minutos a SUMAR a la hora local para llegar a UTC
+  // (positivo si estás atrás de UTC, ej. 180 en Argentina) — el signo
+  // contrario de lo que la función de Postgres necesita para ir de UTC a
+  // hora local, por eso se manda invertido.
+  const { data, error } = await supabase.rpc('register_compare_use', {
+    p_user_id: userId,
+    p_utc_offset_minutes: -new Date().getTimezoneOffset(),
+    p_signature: signature || null,
+  });
 
-  const { error } = await supabase.from('compare_usage').upsert(
-    { user_id: userId, week_start: weekStart, count: next, updated_at: new Date().toISOString() },
-    { onConflict: 'user_id,week_start' }
-  );
-
-  if (error) {
-    console.error('No se pudo registrar el uso de "Comparar ahora":', error.message);
+  if (error || !data) {
+    console.error('No se pudo registrar el uso de "Comparar ahora":', error?.message);
+    // Sin respuesta del server no hay forma honesta de decir que sí: mejor
+    // no revelar el desglose a que alguien vea gratis lo que falló en
+    // contar, y que reintente en vez de quedarse mirando un total sin poder
+    // confirmar si le costó un uso o no.
+    return { allowed: false, count: FREE_COMPARE_LIMIT };
   }
 
-  return next;
+  return { allowed: Boolean(data.allowed), count: Number(data.count) || 0 };
 }

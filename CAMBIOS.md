@@ -1,3 +1,25 @@
+# Cambios de esta tanda (últimos textos de carga → skeleton)
+
+- **`components/StoreApp.tsx`**: quedaban dos lugares con "Cargando productos…" + spinner en el catálogo (el modo normal y el modo rubro recién elegido) — el modo búsqueda en vivo ya usaba `<ListSkeleton>`. Los dos pasan a `<ListSkeleton rows={6} />`. Se sacó `.loading-state`, `.spinner` y `@keyframes spin` de `app/globals.css` por quedar sin uso.
+- **Safe-area en barras flotantes**: ya estaba cubierto en las cuatro (`.bottom-nav`, `.cart-limit-toast`, `.shared-cart-banner`, `.pcard-notice`) vía `bottom: calc(Xpx + env(safe-area-inset-bottom))`, y en `.wrap` vía `padding-bottom`. Sumarle además `padding-bottom: env(...)` a alguna de las de `bottom: calc()` DUPLICARÍA el inset (quedaría con más aire del que hace falta) — no se tocó nada ahí. Si hay una barra puntual sin cubrir avisame cuál.
+
+# Cambios de esta tanda (sw.js: network-first para toda la API)
+
+- **`public/sw.js`**: el network-first que antes solo cubría `/api/productos`, `/api/producto` y `/api/sucursales` (hardcodeados) ahora es genérico: cualquier GET a `/api/*` entra, excepto `/api/cron/*` (nunca lo llama el navegador — lo usa Vercel con un secreto en el header — pero queda afuera explícito, no por confiar en "en la práctica"). Cache-first sigue siendo solo para `STATIC_ASSETS` (logos, íconos, manifest). Caché renombrado `nta-api-*` (antes `nta-prices-*`) ya que ahora no es solo de precios.
+
+# Cambios de esta tanda (sacar localStorage de "Comparar ahora")
+
+- **`lib/compareLimit.ts` sin localStorage** (y `supabase/schema.sql`, `components/StoreApp.tsx`): quedaban dos usos de localStorage en el límite freemium: el contador de invitados (`GUEST_COMPARE_KEY`, resetable con solo abrir una ventana de incógnito) y el "ya desbloqueaste este carrito" (`REVEALED_KEY`, que solo valía en ese navegador). Los dos se sacaron.
+  - `register_compare_use` (Postgres) ahora también recibe `p_signature` (la firma del carrito) y guarda en `compare_usage.revealed_signatures` qué carritos ya se desbloquearon esa semana — mismo comportamiento de "no cobrar de nuevo al recargar", pero server-side y por cuenta, no por navegador.
+  - Sin cuenta, "Comparar ahora" ya no da 3 usos gratis "de buena fe": pide crear cuenta. No había forma honesta de darle una cuota real a alguien sin una sesión que el server pudiera validar.
+
+# Cambios de esta tanda (auditoría de seguridad)
+
+- **"Comparar ahora" validado en el server** (`supabase/schema.sql` — función `register_compare_use` — y `lib/compareLimit.ts`, `components/StoreApp.tsx`): el tope de 3 comparaciones/semana del plan free se chequeaba y sumaba solo en el navegador; nada impedía pegarle directo a la API de Supabase con un `week_start` inventado y tener cupo infinito. Ahora un RPC de Postgres (SECURITY DEFINER, atómico) es quien decide si se puede sumar un uso más, calculando la semana del lado del server a partir del offset horario del cliente (no de una fecha que él mande). El cliente llama a este RPC y solo revela el desglose si contesta `allowed: true`.
+- **Cámara del escáner** (`components/BarcodeScanner.tsx`): si se cerraba el escáner mientras `scanner.start()` todavía no había resuelto, `stop()` podía tirar error y la cámara quedaba prendida. Ahora el cierre espera a que `start()` termine antes de pedir `stop()`, y además se apagan a mano los tracks del `<video>` como red de seguridad, pase lo que pase con la librería.
+- **PWA / caché** (`public/sw.js`): las rutas de precios (`/api/productos`, `/api/producto`, `/api/sucursales`) ahora tienen estrategia *network first* en el service worker — siempre se prioriza el precio fresco, y solo si falla la red se sirve la última respuesta buena guardada para esa búsqueda puntual. Complementa (no reemplaza) el fallback de catálogo completo que ya vivía en `lib/catalogCache.ts`.
+- Cron (`/api/cron/snapshot-prices`) y políticas RLS de Supabase: ya estaban protegidos (secreto en tiempo constante, `enable row level security` en todas las tablas) — se revisaron como parte de esta auditoría y no hicieron falta cambios ahí.
+
 # Cambios de esta tanda (comparación y catálogo según captura)
 
 - **"Dónde conviene hoy"** (`components/CompareSection.tsx`, `components/StoreApp.tsx`, `app/globals.css`): la comparación del carrito por súper subió de abajo de todo a justo arriba del catálogo. Una tarjeta con una fila por súper (logo en cuadradito, nombre, barra, total y "+$X" contra el más barato; el más barato lleva "Más barato" en verde). Título con "Editar" (abre el carrito). Abajo, "Actualizado hoy, 08:40" (hora real del precio más viejo del carrito) y "Qué incluye".

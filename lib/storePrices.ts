@@ -146,25 +146,25 @@ export type StorePriceDetail = {
   discountPct?: number;
 };
 
-// Caché en memoria con vencimiento (TTL): cada valor guardado "expira" solo,
-// así el precio se termina refrescando aunque el usuario no recargue la
-// página. No usamos un Map simple porque eso lo dejaba pegado al primer
-// precio que se trajo en toda la sesión.
+// Caché en memoria con vencimiento (TTL). Dos formas de leerla:
+//   - get(): solo devuelve el valor si todavía está fresco (para saber si
+//     hace falta salir a la red).
+//   - getStale(): devuelve lo último que se guardó AUNQUE ya haya vencido,
+//     sin borrarlo. Es el respaldo de la estrategia "network first" de acá
+//     abajo: si la red falla, mejor un precio con antigüedad conocida que
+//     ningún precio.
 class TtlCache<T> {
   private store = new Map<string, { value: T; expiresAt: number }>();
 
   get(key: string): T | undefined {
     const hit = this.store.get(key);
     if (!hit) return undefined;
-    if (Date.now() > hit.expiresAt) {
-      this.store.delete(key);
-      return undefined;
-    }
+    if (Date.now() > hit.expiresAt) return undefined;
     return hit.value;
   }
 
-  has(key: string): boolean {
-    return this.get(key) !== undefined;
+  getStale(key: string): T | undefined {
+    return this.store.get(key)?.value;
   }
 
   set(key: string, value: T, ttlMs: number) {
@@ -178,18 +178,24 @@ const detailInFlight = new Map<string, Promise<Record<string, StorePriceDetail> 
 // Igual que fetchStorePrices, pero se queda también con el precio de lista
 // y el % de descuento cuando hay una promo activa más barata que la lista,
 // para poder mostrar el precio tachado en la ficha del producto.
+//
+// Estrategia "network first": siempre se sale a pedir el precio de nuevo
+// (nunca se responde solo con lo que ya había en memoria, salvo que haya un
+// pedido idéntico en vuelo — eso sigue evitando duplicados, no reemplaza la
+// red por caché). El caché acá adentro es el PLAN B: si el pedido de red
+// falla (sin señal, timeout, Precios Claros caído), se devuelve el último
+// precio bueno que se haya visto para este producto+sucursales, aunque ya
+// esté vencido, en vez de dejar al producto sin precio. Antes era al revés
+// (cache-first con TTL: si había algo guardado de los últimos 30 minutos,
+// ni se llegaba a preguntarle a la red), lo cual podía mostrar un precio
+// desactualizado aunque hubiera señal de sobra para traer el de ahora.
 export async function fetchStorePriceDetails(
   ean: string,
-  stores: NearbyStore[],
-  { fresh = false }: { fresh?: boolean } = {}
+  stores: NearbyStore[]
 ): Promise<Record<string, StorePriceDetail> | null> {
   if (!ean || !stores.length) return null;
 
   const cacheKey = ean + '|' + stores.map((s) => s.sucursalId).join(',');
-  // `fresh` saltea el caché del navegador: lo usa el refresco del carrito
-  // justo antes de comparar, que es el momento en que el precio tiene que
-  // ser el de ahora sí o sí.
-  if (!fresh && detailCache.has(cacheKey)) return detailCache.get(cacheKey)!;
   if (detailInFlight.has(cacheKey)) return detailInFlight.get(cacheKey)!;
 
   const promise = (async () => {
@@ -239,11 +245,11 @@ export async function fetchStorePriceDetails(
       detailCache.set(cacheKey, final, PRICE_TTL_MS);
       return final;
     } catch {
-      // Un error de red no se guarda como "definitivo": si lo cacheáramos
-      // igual que un resultado válido, un fallo pasajero dejaría al
-      // producto sin precio durante 5 minutos enteros. Mejor reintentar en
-      // el próximo pedido.
-      return null;
+      // Red caída o Precios Claros no respondió: plan B de la estrategia
+      // network-first, ver el comentario de arriba de la función. Si nunca
+      // hubo un precio bueno guardado para esta key, seguimos devolviendo
+      // null como antes (no hay nada de qué agarrarse).
+      return detailCache.getStale(cacheKey) ?? null;
     } finally {
       detailInFlight.delete(cacheKey);
     }

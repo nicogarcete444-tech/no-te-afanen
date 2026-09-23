@@ -20,7 +20,7 @@ import { cartStats, estimatedStoreTotals } from '@/lib/cartStats';
 import { formatAge, oldestPricedAt, refreshCartPrices } from '@/lib/cartPrices';
 import { getMonthlyHistory, migrateGuestSavingsToAccount } from '@/lib/savingsHistory';
 import { FREE_CART_PRODUCT_LIMIT, isPremium } from '@/lib/premium';
-import { FREE_COMPARE_LIMIT, cartSignature, getCompareUsage, markRevealed, registerCompareUse, wasAlreadyRevealed } from '@/lib/compareLimit';
+import { FREE_COMPARE_LIMIT, cartSignature, getCompareUsage, registerCompareUse } from '@/lib/compareLimit';
 import { clearSharedCartFromUrl, readSharedCartFromUrl, SharedCartPayload } from '@/lib/sharedCart';
 import { applyTheme, resolveInitialTheme, Theme } from '@/lib/theme';
 
@@ -96,6 +96,36 @@ async function pickHomeTeaserWithPhotos(slots: LiveItem[][]): Promise<LiveItem[]
     })
   );
   return perSlot.filter((item): item is LiveItem => !!item);
+}
+
+// Esqueleto de arranque, con la silueta del header (marca + buscador) y
+// unas filas de producto, en vez del cartelito de "Cargando tu carrito..."
+// que tapaba la app entera con un ícono girando. Ese cartel se sentía como
+// una pantalla de bloqueo (nada visible, nada para hacer) durante los ~200-
+// 600ms típicos que tarda `loadCart` contra Supabase, y bastante más en una
+// red mala. Con esta silueta la persona ve de una que entró a la app real
+// (misma altura, mismos bloques) mientras el carrito termina de llegar.
+function AppShellSkeleton() {
+  return (
+    <div className="app-shell-skeleton" aria-hidden="true">
+      <div className="sks-header">
+        <div className="sks-brand">
+          <div className="sk-block sks-icon" />
+          <div className="sks-brand-text">
+            <div className="sk-block sks-name" />
+            <div className="sk-block sks-sub" />
+          </div>
+        </div>
+        <div className="sk-block sks-search" />
+      </div>
+      <div className="sks-chips">
+        {Array.from({ length: 5 }).map((_, i) => (
+          <div className="sk-block sks-chip" key={i} />
+        ))}
+      </div>
+      <ListSkeleton rows={6} />
+    </div>
+  );
 }
 
 // Esqueleto de carga con la MISMA forma que una fila real de producto
@@ -1060,12 +1090,13 @@ export default function StoreApp({
 
   // Free: el desglose por súper queda oculto (tarjeta "Comparar ahora")
   // hasta que lo pida explícitamente, y eso gasta uno de los 3 usos de la
-  // semana. Si ya desbloqueó ESTE mismo carrito en esta semana, no se le
-  // vuelve a cobrar (ver wasAlreadyRevealed): recargar la página no debe
-  // costarle un uso. Premium lo ve siempre revelado, sin gastar nada.
+  // semana (o ninguno si ese mismo carrito ya se desbloqueó esta semana —
+  // eso lo decide el server en registerCompareUse, no acá). Premium lo ve
+  // siempre revelado, sin gastar nada. `compareRevealed` es solo de esta
+  // visita a la página: al recargar hace falta un toque más a "Comparar
+  // ahora", pero ese toque no vuelve a cobrar si el carrito es el mismo.
   const currentSignature = useMemo(() => cartSignature(selected), [selected]);
-  const alreadyPaid = !premium && wasAlreadyRevealed(currentSignature);
-  const compareRevealedEffective = premium || compareRevealed || alreadyPaid;
+  const compareRevealedEffective = premium || compareRevealed;
   const compareRemaining = Math.max(0, FREE_COMPARE_LIMIT - compareUsage);
 
   // Hero de la portada: con el carrito vacío queda el ahorro del mes de
@@ -1159,15 +1190,25 @@ export default function StoreApp({
   }
 
   async function handleCompareNow() {
-    // Premium, o ya desbloqueado (en esta visita o antes con el mismo
-    // carrito): no gasta un uso más, solo refresca y hace scroll al bloque.
+    // Premium, o ya desbloqueado en esta visita: no gasta un uso más, solo
+    // refresca y hace scroll al bloque.
     if (compareRevealedEffective) {
       scrollToCompare();
       await refreshPricesNow();
       return;
     }
-    // Ya se gastaron los 3 de la semana: mostramos el cartel de upgrade en
-    // vez del desglose (igual hacemos scroll para que lo vea).
+    // Sin cuenta no hay forma real de darle una cuota — ver el porqué en
+    // registerCompareUse (lib/compareLimit.ts).
+    if (!userId) {
+      setCartLimitNotice('Creá tu cuenta gratis para comparar precios por súper.');
+      scrollToCompare();
+      return;
+    }
+    // Chequeo optimista en el cliente: si claramente ya no quedan usos,
+    // mostramos el cartel de upgrade sin ni llamar al server (misma cuenta
+    // de siempre, solo para no gastar un round-trip de más). La respuesta
+    // que de verdad manda es la del RPC de abajo — este `if` es una mejora
+    // de UX, no el gate real.
     if (compareRemaining <= 0) {
       setCartLimitNotice(
         `Ya usaste las ${FREE_COMPARE_LIMIT} comparaciones de esta semana del plan free. Pasate a premium para comparar sin límite.`
@@ -1175,10 +1216,18 @@ export default function StoreApp({
       scrollToCompare();
       return;
     }
-    const next = await registerCompareUse(userId);
-    setCompareUsage(next);
+    const { allowed, count } = await registerCompareUse(userId, currentSignature);
+    setCompareUsage(count);
+    if (!allowed) {
+      // El server dijo que no (llegó al tope justo ahora, o falló el pedido):
+      // el desglose queda oculto pase lo que pase acá en el cliente.
+      setCartLimitNotice(
+        `Ya usaste las ${FREE_COMPARE_LIMIT} comparaciones de esta semana del plan free. Pasate a premium para comparar sin límite.`
+      );
+      scrollToCompare();
+      return;
+    }
     setCompareRevealed(true);
-    markRevealed(currentSignature);
     scrollToCompare();
     await refreshPricesNow();
   }
@@ -1217,21 +1266,7 @@ export default function StoreApp({
   }
 
   if (!cartLoaded) {
-    return (
-      <div className="app-loading">
-        <div className="loading-cart-wrap">
-          <div className="loading-cart-drive">
-            <svg className="loading-cart" width="46" height="46" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
-              <path d="M3 4h2l1.6 9.6a2 2 0 0 0 2 1.7h7.6a2 2 0 0 0 2-1.6L20 8H6.2" />
-              <circle cx="9.5" cy="19" r="1.3" />
-              <circle cx="16.5" cy="19" r="1.3" />
-            </svg>
-          </div>
-          <div className="loading-track" />
-        </div>
-        <div>Cargando tu carrito...</div>
-      </div>
-    );
+    return <AppShellSkeleton />;
   }
 
   return (
@@ -1382,10 +1417,7 @@ export default function StoreApp({
               </div>
             )
           ) : catalogLoading || (loadingMore && filteredCatalog.length === 0) ? (
-            <div className="loading-state" role="status" aria-live="polite">
-              <div className="spinner" aria-hidden="true" />
-              <div>Cargando productos…</div>
-            </div>
+            <ListSkeleton rows={6} />
           ) : filteredCatalog.length === 0 && !rubroMode ? (
             <div className="empty-state">
               <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
@@ -1411,10 +1443,7 @@ export default function StoreApp({
             </div>
           ) : rubroMode && visibleCatalog.length === 0 && (rubroFetching || rubroCanLoadMore) ? (
             // Rubro recién elegido y todavía no llegó nada: cargando, no "vacío".
-            <div className="loading-state" role="status" aria-live="polite">
-              <div className="spinner" aria-hidden="true" />
-              <div>Cargando productos…</div>
-            </div>
+            <ListSkeleton rows={6} />
           ) : visibleCatalog.length === 0 ? (
             <div className="empty-state">
               <div>

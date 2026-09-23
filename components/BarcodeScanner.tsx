@@ -5,6 +5,27 @@ import { useEffect, useRef, useState } from 'react';
 // Id fijo del div donde html5-qrcode monta el <video> de la cámara.
 const READER_ID = 'barcode-reader';
 
+// Red de seguridad, aparte de lo que haga la librería: apaga a mano
+// cualquier track de cámara que haya quedado vivo en el <video> que
+// html5-qrcode inserta adentro de #READER_ID.
+//
+// Por qué hace falta esto además de scanner.stop(): si el escáner se cierra
+// (se toca la ×, se cambia de pestaña del nav inferior) MIENTRAS
+// scanner.start() todavía no terminó de resolver, llamar a stop() en ese
+// momento tira error adentro de html5-qrcode y no llega a liberar el
+// getUserMedia que ya pidió — la lucecita de la cámara se queda prendida
+// aunque la hoja del escáner ya haya desaparecido de la pantalla. Buscando
+// el <video> directo y parando sus tracks a mano, el hardware se libera sí o
+// sí, gane o pierda esa carrera con la librería.
+function releaseAnyActiveCamera() {
+  const video = document.querySelector<HTMLVideoElement>(`#${READER_ID} video`);
+  const stream = video?.srcObject;
+  if (stream instanceof MediaStream) {
+    stream.getTracks().forEach((track) => track.stop());
+  }
+  if (video) video.srcObject = null;
+}
+
 export default function BarcodeScanner({
   open,
   onClose,
@@ -21,6 +42,9 @@ export default function BarcodeScanner({
   // importamos dinámicamente del lado del cliente (ver useEffect de abajo).
   const scannerRef = useRef<any>(null);
   const stoppingRef = useRef(false);
+  // Promesa de scanner.start() en curso. El cleanup la espera antes de
+  // llamar a stop() — ver releaseAnyActiveCamera de arriba para el motivo.
+  const startingRef = useRef<Promise<unknown> | null>(null);
 
   // onDetected va en un ref, no en las dependencias del efecto de abajo.
   // El padre (StoreApp) redefine esa función en cada render, así que tenerla
@@ -59,7 +83,7 @@ export default function BarcodeScanner({
         });
         scannerRef.current = scanner;
 
-        await scanner.start(
+        const startPromise = scanner.start(
           { facingMode: 'environment' },
           {
             fps: 15,
@@ -81,6 +105,7 @@ export default function BarcodeScanner({
               .stop()
               .catch(() => {})
               .finally(() => {
+                releaseAnyActiveCamera();
                 onDetectedRef.current(decodedText.trim());
               });
           },
@@ -89,6 +114,8 @@ export default function BarcodeScanner({
             // se dispara todo el tiempo mientras apunta la cámara. Se ignora.
           }
         );
+        startingRef.current = startPromise;
+        await startPromise;
         if (!cancelled) setStatus('scanning');
       } catch (err: any) {
         if (cancelled) return;
@@ -105,13 +132,36 @@ export default function BarcodeScanner({
 
     return () => {
       cancelled = true;
-      const scanner = scannerRef.current;
-      if (scanner && !stoppingRef.current) {
-        stoppingRef.current = true;
-        scanner.stop().catch(() => {}).finally(() => {
-          scanner.clear?.();
-        });
-      }
+      // Si se cierra apenas abierto, scanner.start() puede seguir en vuelo:
+      // esperamos a que termine (bien o mal) antes de pedirle a la librería
+      // que pare — llamar a stop() con start() todavía pendiente es lo que
+      // dejaba la cámara prendida. releaseAnyActiveCamera corre siempre al
+      // final, pase lo que pase con la librería en el medio.
+      (async () => {
+        try {
+          await startingRef.current;
+        } catch {
+          // el error de un start() fallido ya lo maneja el catch de arriba;
+          // acá solo nos interesa esperar a que termine.
+        }
+        const scanner = scannerRef.current;
+        if (scanner && !stoppingRef.current) {
+          stoppingRef.current = true;
+          try {
+            await scanner.stop();
+          } catch {
+            // puede tirar si la cámara nunca llegó a arrancar del todo — no
+            // importa, releaseAnyActiveCamera de abajo se ocupa igual.
+          }
+          try {
+            scanner.clear?.();
+          } catch {
+            // no-op: clear() sobre un contenedor ya vacío no rompe nada,
+            // pero por las dudas no dejamos que tire arriba del resto.
+          }
+        }
+        releaseAnyActiveCamera();
+      })();
     };
   }, [open]);
 

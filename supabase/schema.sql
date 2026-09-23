@@ -128,6 +128,12 @@ create table if not exists public.price_snapshots (
 create index if not exists price_snapshots_ean_captured_idx
   on public.price_snapshots (ean, captured_at);
 
+-- Falta store_id: acá no hay tabla de sucursales con ID propio, el
+-- identificador real de "qué súper" es esta columna (`chain`, texto: "Coto",
+-- "Carrefour"...). La indexamos a ella en su lugar.
+create index if not exists price_snapshots_chain_idx
+  on public.price_snapshots (chain);
+
 alter table public.price_snapshots enable row level security;
 
 -- Lectura pública (es lo mismo que ya es público en Precios Claros, solo
@@ -202,6 +208,8 @@ alter table public.price_drop_notifications
 
 create index if not exists price_drop_notifications_user_created_idx
   on public.price_drop_notifications (user_id, created_at);
+create index if not exists price_drop_notifications_ean_idx
+  on public.price_drop_notifications (ean);
 
 alter table public.price_drop_notifications enable row level security;
 
@@ -358,9 +366,21 @@ create table if not exists public.compare_usage (
   user_id uuid not null references auth.users (id) on delete cascade,
   week_start date not null,
   count integer not null default 0,
+  -- Qué carritos (ver cartSignature en lib/compareLimit.ts) ya se
+  -- desbloquearon esta semana. Antes esto vivía en localStorage
+  -- (wasAlreadyRevealed/markRevealed): recargar la página no volvía a
+  -- cobrar un uso, pero solo en ESE navegador — borrar el localStorage, o
+  -- entrar desde otro dispositivo, hacía que se cobrara de nuevo por el
+  -- mismo carrito. Guardándolo acá, la garantía es real (server-side) y
+  -- vale para la cuenta, no para el navegador.
+  revealed_signatures text[] not null default '{}',
   updated_at timestamptz not null default now(),
   primary key (user_id, week_start)
 );
+
+-- Si la tabla ya existía de una versión anterior sin esta columna:
+alter table public.compare_usage
+  add column if not exists revealed_signatures text[] not null default '{}';
 
 alter table public.compare_usage enable row level security;
 
@@ -533,4 +553,117 @@ drop trigger if exists compare_usage_counter on public.compare_usage;
 create trigger compare_usage_counter
   before insert or update on public.compare_usage
   for each row execute function public.enforce_compare_counter();
+
+-- ============================================================
+-- "Comparar ahora": chequeo Y descuento del tope, atómicos, en el server
+-- ============================================================
+--
+-- El trigger de arriba (enforce_compare_counter) solo evita que el CONTADOR
+-- se manipule (bajar, saltar de a más de uno, cambiar de semana en una fila
+-- ya existente) — pero nunca impide directamente pasarse de
+-- FREE_COMPARE_LIMIT: nada frenaba un insert con week_start='2099-01-01' (o
+-- cualquier semana futura inventada), que siempre entra con count=1 sin
+-- pisar ninguna fila existente. Con eso, alguien pegándole directo a la API
+-- de Supabase (bypaseando por completo el código de React) tenía cupo
+-- infinito con solo variar la fecha.
+--
+-- Esta función es el único lugar que decide "¿te dejo ver el desglose?":
+-- lee si es premium, si no lo es intenta sumar un uso SOLO si todavía no
+-- llegó al tope, y devuelve `allowed` con el resultado real. `lib/compare
+-- Limit.ts` ahora llama a esto (vía supabase.rpc) en vez de hacer un select
+-- + upsert desde el cliente en dos pasos sueltos — acá es una sola
+-- operación atómica, así que dos pestañas comparando al mismo tiempo no
+-- pueden colarse un cuarto uso en la carrera entre el select y el upsert.
+-- Tampoco queda NADA de esto del lado del cliente en localStorage: ni el
+-- contador de invitado, ni el "ya lo desbloqueaste" — lo único que guarda
+-- localStorage ahora es el carrito en sí (lib/cart.ts), no nada relacionado
+-- al tope.
+--
+-- `p_utc_offset_minutes` reemplaza al week_start que antes mandaba el
+-- cliente directamente: Postgres no sabe en qué huso horario está la
+-- persona, y queremos que la semana corte a SU medianoche local (mismo
+-- criterio que getWeekStart() en TS), pero sin dejar que elija la fecha a
+-- mano. Se acepta el offset (los -720..+840 minutos que existen de verdad)
+-- y la fecha de corte la calcula esta función, no quien llama.
+--
+-- `p_signature` es cartSignature(selected) del lado de TS: identifica QUÉ
+-- carrito se está comparando. Si ese mismo carrito ya se desbloqueó esta
+-- semana, se devuelve `allowed: true` sin tocar el contador — así agregar o
+-- sacar un producto sigue gastando un uso nuevo (cambia la firma), pero
+-- volver a mirar el mismo carrito (recargar la página, entrar desde el
+-- celu) no cuesta nada de nuevo.
+create or replace function public.register_compare_use(
+  p_user_id uuid,
+  p_utc_offset_minutes integer default 0,
+  p_signature text default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_limit constant integer := 3; -- FREE_COMPARE_LIMIT, ver lib/compareLimit.ts
+  v_offset integer := greatest(-720, least(840, coalesce(p_utc_offset_minutes, 0)));
+  v_local timestamptz := now() + (v_offset || ' minutes')::interval;
+  v_dow integer := extract(dow from v_local)::integer; -- 0 = domingo
+  v_week_start date := (v_local - (make_interval(days => case when v_dow = 0 then 6 else v_dow - 1 end)))::date;
+  v_existing public.compare_usage;
+  v_count integer;
+begin
+  -- auth.uid() es quien está autenticado de verdad en este pedido (viene del
+  -- JWT, no de lo que mande el body) — sin este chequeo, SECURITY DEFINER
+  -- le da a esta función permiso para escribir la fila de CUALQUIER user_id,
+  -- RLS de compare_usage incluido.
+  if p_user_id is null or auth.uid() is null or auth.uid() <> p_user_id then
+    raise exception 'no_autorizado';
+  end if;
+
+  if public.is_premium_user(p_user_id) then
+    return jsonb_build_object('allowed', true, 'premium', true, 'count', 0, 'limit', v_limit);
+  end if;
+
+  select * into v_existing from public.compare_usage
+    where user_id = p_user_id and week_start = v_week_start;
+
+  if v_existing.user_id is not null and p_signature is not null
+     and p_signature = any(v_existing.revealed_signatures) then
+    return jsonb_build_object('allowed', true, 'premium', false, 'count', v_existing.count, 'limit', v_limit);
+  end if;
+
+  insert into public.compare_usage (user_id, week_start, count, revealed_signatures, updated_at)
+  values (
+    p_user_id, v_week_start, 1,
+    case when p_signature is null then '{}'::text[] else array[p_signature] end,
+    now()
+  )
+  on conflict (user_id, week_start) do update
+    set count = public.compare_usage.count + 1,
+        revealed_signatures = case
+          when p_signature is null then public.compare_usage.revealed_signatures
+          else public.compare_usage.revealed_signatures || p_signature
+        end,
+        updated_at = now()
+    where public.compare_usage.count < v_limit
+  returning count into v_count;
+
+  if v_count is null then
+    -- el "where" de arriba no matcheó: ya estaba en el tope. No se tocó la
+    -- fila; leemos el valor actual solo para poder devolverlo.
+    select count into v_count from public.compare_usage
+      where user_id = p_user_id and week_start = v_week_start;
+    return jsonb_build_object('allowed', false, 'premium', false, 'count', coalesce(v_count, v_limit), 'limit', v_limit);
+  end if;
+
+  return jsonb_build_object('allowed', true, 'premium', false, 'count', v_count, 'limit', v_limit);
+end;
+$$;
+
+-- `authenticated` nomás: un invitado sin sesión no tiene auth.uid(), así que
+-- ni llegaría a pasar el chequeo de arriba. Antes los invitados tenían su
+-- propio tope "de buena fe" en localStorage; se sacó junto con el resto de
+-- esa lógica (ver lib/compareLimit.ts) porque no era una cuota real — se
+-- reseteaba solo con abrir una ventana de incógnito. Ahora "Comparar ahora"
+-- pide cuenta: es la única forma de tener una cuota que valga algo.
+grant execute on function public.register_compare_use(uuid, integer, text) to authenticated;
 
