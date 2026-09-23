@@ -1,0 +1,3 @@
+{
+  "/api/cron/snapshot-prices/route": "app/api/cron/snapshot-prices/route.js"
+}

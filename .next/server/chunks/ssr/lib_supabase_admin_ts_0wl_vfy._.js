@@ -1,0 +1,3 @@
+module.exports=[39916,69725,a=>{"use strict";var b=a.i(45618);function c(a){return a?.is_premium?a.premium_until?new Date(a.premium_until):a.since?new Date(new Date(a.since).getTime()+2592e6):null:null}a.s(["createAdminClient",0,function(){let a=process.env.NEXT_PUBLIC_SUPABASE_URL,c=process.env.SUPABASE_SERVICE_ROLE_KEY;return a&&c?(0,b.createClient)(a,c,{auth:{persistSession:!1,autoRefreshToken:!1}}):null}],39916),a.i(42537),a.s(["MANUAL_GRANT_DURATION_DAYS",0,30,"isPremiumStatusActive",0,function(a){if(!a?.is_premium)return!1;let b=c(a);return!b||Date.now()<b.getTime()},"premiumExpiresAt",0,c],69725)}];
+
+//# sourceMappingURL=lib_supabase_admin_ts_0wl_vfy._.js.map

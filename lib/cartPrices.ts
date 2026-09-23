@@ -65,7 +65,7 @@ export async function refreshCartPrices(
 
   const results = await Promise.all(
     targets.map(async ({ id, product }) => {
-      const detail = await fetchStorePriceDetails(product.ean!, stores, { fresh: true });
+      const detail = await fetchStorePriceDetails(product.ean!, stores);
       if (!detail) return null;
       const prices: Record<string, number> = {};
       Object.entries(detail).forEach(([chain, d]) => {

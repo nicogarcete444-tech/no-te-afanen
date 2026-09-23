@@ -262,6 +262,14 @@ export async function fetchStorePriceDetails(
 const priceCache = new TtlCache<Record<string, number> | null>();
 const priceInFlight = new Map<string, Promise<Record<string, number> | null>>();
 
+// Misma estrategia "network first" que fetchStorePriceDetails de arriba: el
+// `priceCache.has(cacheKey)` que había acá antes hacía justo lo contrario
+// (cache-first, respondía sin salir a la red si había algo de los últimos
+// 30 minutos) — Y ADEMÁS `.has()` no existe en TtlCache, así que ni
+// compilaba (`tsc` lo frenaba en el build de Vercel aunque Turbopack lo
+// dejara pasar). Se saca esa línea entera: ahora siempre se sale a pedir de
+// nuevo, y el caché queda solo como plan B si la red falla (ver getStale
+// más abajo).
 export async function fetchStorePrices(
   ean: string,
   stores: NearbyStore[]
@@ -269,7 +277,6 @@ export async function fetchStorePrices(
   if (!ean || !stores.length) return null;
 
   const cacheKey = ean + '|' + stores.map((s) => s.sucursalId).join(',');
-  if (priceCache.has(cacheKey)) return priceCache.get(cacheKey)!;
   if (priceInFlight.has(cacheKey)) return priceInFlight.get(cacheKey)!;
 
   const promise = (async () => {
@@ -315,7 +322,10 @@ export async function fetchStorePrices(
       priceCache.set(cacheKey, final, PRICE_TTL_MS);
       return final;
     } catch {
-      return null;
+      // Red caída: mejor el último precio bueno conocido (aunque ya esté
+      // vencido) que dejar el producto sin nada — mismo plan B que
+      // fetchStorePriceDetails.
+      return priceCache.getStale(cacheKey) ?? null;
     } finally {
       priceInFlight.delete(cacheKey);
     }

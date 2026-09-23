@@ -1,3 +1,10 @@
+# Cambios de esta tanda (build roto en Vercel)
+
+`npm run build` tiraba `exited with 1` en Vercel por 2 errores de TypeScript que Turbopack no frena en local pero `tsc` sí (no eran de mis cambios anteriores, ya estaban en el repo):
+
+- **`lib/cartPrices.ts`**: llamaba a `fetchStorePriceDetails(ean, stores, { fresh: true })` con un tercer argumento que la función no acepta (`TS2554`). Se saca — la función ya es "network first" siempre, no necesita ese flag.
+- **`lib/storePrices.ts`**: `fetchStorePrices` hacía `priceCache.has(cacheKey)` para responder cache-first, pero `TtlCache` nunca tuvo un método `.has()` (`TS2339`) — no compilaba, y de paso era cache-first cuando el resto del archivo ya es network-first. Se saca esa línea; el catch ahora cae a `getStale()` como respaldo, igual que `fetchStorePriceDetails`.
+
 # Cambios de esta tanda (últimos textos de carga → skeleton)
 
 - **`components/StoreApp.tsx`**: quedaban dos lugares con "Cargando productos…" + spinner en el catálogo (el modo normal y el modo rubro recién elegido) — el modo búsqueda en vivo ya usaba `<ListSkeleton>`. Los dos pasan a `<ListSkeleton rows={6} />`. Se sacó `.loading-state`, `.spinner` y `@keyframes spin` de `app/globals.css` por quedar sin uso.

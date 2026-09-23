@@ -1,0 +1,27 @@
+{
+  "node": {
+    "40f27e35b76d578c469c7455913b49a7cb9f3a5715": {
+      "workers": {
+        "app/admin/page": {
+          "moduleId": 4100,
+          "async": false,
+          "codeHash": null
+        }
+      },
+      "exportedName": "grantPremium",
+      "filename": "app/admin/actions.ts"
+    },
+    "40b29124325a1787e60a2bd44bd228a6664339dab5": {
+      "workers": {
+        "app/admin/page": {
+          "moduleId": 4100,
+          "async": false,
+          "codeHash": null
+        }
+      },
+      "exportedName": "revokePremium",
+      "filename": "app/admin/actions.ts"
+    }
+  },
+  "edge": {}
+}
