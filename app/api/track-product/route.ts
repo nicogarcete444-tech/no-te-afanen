@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { getClientIp, isRateLimited, isValidProductId, sanitizeQuery } from '@/lib/apiSecurity';
+import { isRateLimited, isValidProductId, sanitizeQuery } from '@/lib/apiSecurity';
 
 // Escribe con la service_role key, no con la anon key.
 //
@@ -12,7 +12,9 @@ import { getClientIp, isRateLimited, isValidProductId, sanitizeQuery } from '@/l
 // acá — y por el isRateLimited de más abajo.
 
 export async function POST(request: NextRequest) {
-  if (isRateLimited('track-product:' + getClientIp(request))) {
+  const contentLength = Number(request.headers.get('content-length') || 0);
+  if (contentLength > 4096) return NextResponse.json({ error: 'Body demasiado grande.' }, { status: 413 });
+  if (await isRateLimited(request, 'track-product')) {
     return NextResponse.json({ error: 'Demasiados pedidos. Esperá un momento.' }, { status: 429 });
   }
 
@@ -38,13 +40,14 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ tracked: false });
   }
 
-  const { error } = await admin
-    .from('tracked_products')
-    .upsert({ ean, nombre, last_seen_at: new Date().toISOString() }, { onConflict: 'ean' });
+  const { data: tracked, error } = await admin.rpc('track_product_limited', {
+    p_ean: ean,
+    p_nombre: nombre,
+  });
 
   if (error) {
     console.error('[track-product]', error.message);
     return NextResponse.json({ error: 'No se pudo registrar el producto.' }, { status: 500 });
   }
-  return NextResponse.json({ tracked: true });
+  return NextResponse.json({ tracked: tracked === true });
 }

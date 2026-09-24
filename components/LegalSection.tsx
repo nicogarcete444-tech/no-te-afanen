@@ -53,7 +53,7 @@ export function LegalDisclaimer() {
 // fecha real para el <lastmod> del sitemap. Si estuvieran escritas por separado
 // se iban a desincronizar en la primera edición apurada de los términos, así
 // que acá se escribe una sola vez y el texto en castellano se deriva.
-export const LAST_UPDATED_ISO = '2026-09-17';
+export const LAST_UPDATED_ISO = '2026-09-24';
 
 // timeZone UTC a propósito: 'YYYY-MM-DD' se parsea como medianoche UTC y, sin
 // fijar la zona, en Argentina (UTC-3) se renderizaría el día anterior.

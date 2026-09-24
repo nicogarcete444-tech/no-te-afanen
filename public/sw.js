@@ -3,10 +3,9 @@
 //
 // Subite la versión acá cada vez que cambie STATIC_ASSETS o la estrategia de
 // abajo: es lo único que hace que los clientes viejos borren su caché.
-const CACHE_VERSION = 'nta-v3';
+const CACHE_VERSION = 'nta-v4';
 const SHELL_CACHE = `nta-shell-${CACHE_VERSION}`;
-const API_CACHE = `nta-api-${CACHE_VERSION}`;
-const CURRENT_CACHES = [SHELL_CACHE, API_CACHE];
+const CURRENT_CACHES = [SHELL_CACHE];
 
 // Assets con nombre fijo (no llevan hash de build), así que cachearlos acá
 // no se rompe en el próximo deploy. Los JS/CSS de Next SÍ llevan hash en el
@@ -46,9 +45,9 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(
     Promise.all([
       self.clients.claim(),
-      caches.keys().then((keys) =>
-        Promise.all(keys.filter((k) => !CURRENT_CACHES.includes(k)).map((k) => caches.delete(k)))
-      ),
+      caches.keys().then((keys) => Promise.all(
+        keys.filter((k) => k.startsWith('nta-') && !CURRENT_CACHES.includes(k)).map((k) => caches.delete(k))
+      )),
     ])
   );
 });
@@ -61,22 +60,9 @@ self.addEventListener('activate', (event) => {
 //   1. Los assets fijos de STATIC_ASSETS: cache-first, con la red como
 //      respaldo (y actualizando el caché en segundo plano). Son imágenes
 //      chicas que casi no cambian; ahorra red y funcionan sin conexión.
-//   2. Las navegaciones (entrar a la app / recargar): network-first, así
-//      siempre se ve la versión más nueva cuando hay señal, pero si la red
-//      falla se sirve la última página que quedó guardada en vez de la
-//      pantalla de error del navegador.
-//   3. Todo `/api/*` (menos `/api/cron/*`, ver isApiRequest): también
-//      network-first. La red SIEMPRE gana cuando hay señal (nunca queremos
-//      mostrar un precio viejo pudiendo traer uno fresco) — pero si falla a
-//      mitad de sesión, se devuelve la última respuesta buena que quedó
-//      guardada para ese pedido puntual, en vez de que la promesa reviente y
-//      la pantalla se quede sin nada. Complementa al fallback que ya existe
-//      en lib/catalogCache.ts (ese guarda el catálogo ya armado en
-//      localStorage; este cachea la respuesta cruda de cada pedido a la
-//      API) — con los dos, tanto el primer catálogo que se pinta como una
-//      búsqueda nueva mientras estás sin señal tienen de dónde sacar algo.
-//
-// Todo lo que no entra en esos tres casos (dominios externos, JS/CSS con
+// Solo cacheamos assets estáticos genéricos. No cacheamos HTML de páginas ni
+// respuestas API: pueden contener datos privados o consultas con coordenadas.
+// Todo lo que no entra en ese caso (dominios externos, JS/CSS con
 // hash de build) ni siquiera pasa por acá: `fetch` no dispara este listener
 // para nada que el código de abajo no capture con `event.respondWith`, así
 // que sigue yendo directo a la red como si el service worker no existiera.
@@ -84,64 +70,18 @@ function isStaticAsset(url) {
   return url.origin === self.location.origin && STATIC_ASSETS.includes(url.pathname);
 }
 
-// Cualquier GET a nuestra propia API entra en el network-first genérico,
-// CON UNA EXCEPCIÓN: /api/cron/*. Ese endpoint lo llama la infraestructura
-// de Vercel con un secreto en el header Authorization (ver
-// app/api/cron/snapshot-prices/route.ts) — nunca el navegador de una
-// persona usando la app —, así que en la práctica este service worker jamás
-// lo va a interceptar. Lo excluimos igual, explícito, para no depender de
-// "en la práctica": si alguna vez algo lo llamara desde el cliente, no
-// queremos una respuesta de ese endpoint (ni un 401) cacheada bajo esa URL.
-function isApiRequest(url) {
-  if (url.origin !== self.location.origin) return false;
-  if (!url.pathname.startsWith('/api/')) return false;
-  return !url.pathname.startsWith('/api/cron/');
-}
-
 async function cacheFirst(request) {
-  const cached = await caches.match(request);
+  const cache = await caches.open(SHELL_CACHE);
+  const cached = await cache.match(request);
   const network = fetch(request)
     .then((response) => {
       if (response && response.ok) {
-        caches.open(SHELL_CACHE).then((cache) => cache.put(request, response.clone()));
+        cache.put(request, response.clone());
       }
       return response;
     })
     .catch(() => null);
   return cached || (await network) || Response.error();
-}
-
-async function networkFirstNavigation(request) {
-  try {
-    const response = await fetch(request);
-    if (response && response.ok) {
-      const cache = await caches.open(SHELL_CACHE);
-      cache.put(request, response.clone());
-    }
-    return response;
-  } catch {
-    const cached = await caches.match(request);
-    return cached || caches.match('/');
-  }
-}
-
-// Igual estrategia que networkFirstNavigation, pero contra API_CACHE y sin
-// el fallback a '/' (acá no hay una "respuesta por defecto" razonable si no
-// está cacheado justo ESE pedido — mejor dejar que el error suba y que
-// lib/catalogCache.ts se ocupe de mostrar el catálogo viejo completo).
-async function networkFirstApi(request) {
-  try {
-    const response = await fetch(request);
-    if (response && response.ok) {
-      const cache = await caches.open(API_CACHE);
-      cache.put(request, response.clone());
-    }
-    return response;
-  } catch {
-    const cached = await caches.match(request);
-    if (cached) return cached;
-    throw new Error('sin red y sin caché para este pedido');
-  }
 }
 
 self.addEventListener('fetch', (event) => {
@@ -160,15 +100,7 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  if (isApiRequest(url)) {
-    event.respondWith(networkFirstApi(request));
-    return;
-  }
-
-  if (request.mode === 'navigate' && url.origin === self.location.origin) {
-    event.respondWith(networkFirstNavigation(request));
-  }
-
+  // Navegaciones y API siguen la política nativa del navegador.
   // Cualquier otra cosa (dominios externos, JS/CSS con hash de build) no
   // entra acá: no se llama a respondWith y el pedido sigue de largo,
   // manejado 100% por el navegador — mismo comportamiento que antes.

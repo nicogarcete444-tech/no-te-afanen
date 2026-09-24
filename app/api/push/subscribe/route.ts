@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { getClientIp, isRateLimited } from '@/lib/apiSecurity';
+import { isRateLimited } from '@/lib/apiSecurity';
 
 // Guarda (o actualiza) la PushSubscription del usuario logueado. Requiere
 // sesión: las alertas push, igual que las de bajada de precio in-app, están
@@ -9,7 +9,7 @@ export async function POST(request: NextRequest) {
   // Esta ruta escribe en la base. Sin tope, alguien con una sesión válida
   // (o un script con una cuenta descartable) podía llenar push_subscriptions
   // a fuerza de endpoints inventados.
-  if (isRateLimited('push-sub:' + getClientIp(request), 20)) {
+  if (await isRateLimited(request, 'push-sub', 20)) {
     return NextResponse.json({ error: 'Demasiados pedidos. Esperá un momento.' }, { status: 429 });
   }
 

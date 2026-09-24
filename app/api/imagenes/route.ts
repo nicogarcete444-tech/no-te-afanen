@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getClientIp, isRateLimited, RATE_LIMITS } from '@/lib/apiSecurity';
+import { isRateLimited, RATE_LIMITS } from '@/lib/apiSecurity';
 import { fetchWithTimeout } from '@/lib/fetchWithTimeout';
 
 // Con hasta MAX_EANS productos por pedido y (antes) hasta 4 llamadas
@@ -342,7 +342,7 @@ async function resolveOne(
 }
 
 export async function GET(request: NextRequest) {
-  if (isRateLimited('imagenes:' + getClientIp(request), RATE_LIMITS.imagenes)) {
+  if (await isRateLimited(request, 'imagenes', RATE_LIMITS.imagenes)) {
     return NextResponse.json({ error: 'Demasiados pedidos. Esperá un momento.' }, { status: 429 });
   }
 

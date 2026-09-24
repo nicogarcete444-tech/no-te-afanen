@@ -61,9 +61,14 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=tu-anon-key
 PRECIOS_CLAROS_API_URL=https://d3e6htiiul5ek9.cloudfront.net/prod/productos
 ```
 
-Si además querés que funcione el **historial de precios** (punto siguiente
-en "Qué cambió"), sumá estas dos — si las dejás vacías, el resto de la app
-funciona igual, simplemente no se acumula historial:
+El archivo `.env.example` documenta las variables opcionales de administración,
+alertas push, cron y Premium. Copiá solo las que vayas a usar y reemplazá los
+valores de ejemplo; nunca publiques `SUPABASE_SERVICE_ROLE_KEY` ni
+`VAPID_PRIVATE_KEY`.
+
+Para producción, configurá `SUPABASE_SERVICE_ROLE_KEY`: habilita el límite
+compartido de las rutas públicas y las funciones administrativas del servidor.
+`CRON_SECRET` protege la tarea diaria del historial de precios:
 
 ```
 SUPABASE_SERVICE_ROLE_KEY=tu-service-role-key   # Project Settings → API → "service_role"
@@ -154,7 +159,8 @@ Para que funcione en un deploy hace falta:
    sin y con el prefijo) y `VAPID_PRIVATE_KEY` en las env vars (ver
    `.env.example`).
 3. Correr de nuevo `supabase/schema.sql` en el SQL Editor de Supabase (crea
-   la tabla `push_subscriptions`, es seguro correrlo de nuevo).
+   la tabla `push_subscriptions` y el límite compartido de solicitudes; es
+   seguro correrlo de nuevo. Ejecutalo antes de publicar esta versión.
 
 En local (`npm run dev`) el push también funciona, pero solo en `localhost`
 — Web Push exige HTTPS salvo esa excepción.
@@ -231,10 +237,6 @@ lista de compras guardada.
 
 - **Recuperar contraseña**: Supabase lo soporta out of the box
   (`supabase.auth.resetPasswordForEmail`), no está cableado en el front todavía.
-- **Rate limiting compartido**: el que hay (`lib/apiSecurity.ts`) vive en la
-  memoria de cada instancia serverless, así que no es un tope global real. Si
-  el tráfico crece, conviene pasarlo a Upstash Ratelimit o al firewall de
-  Vercel.
-- **Actualizar dependencias**: `npm audit` va a marcar avisos de seguridad de
-  Next.js con el tiempo — antes de un lanzamiento real, correr
-  `npm outdated` / `npm audit` y actualizar.
+- **Rate limiting**: las rutas públicas usan un límite compartido en Supabase
+  cuando está configurada `SUPABASE_SERVICE_ROLE_KEY`; volvé a ejecutar
+  `supabase/schema.sql` al publicar una versión que lo actualice.

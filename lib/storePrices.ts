@@ -150,10 +150,6 @@ export type StorePriceDetail = {
 // Caché en memoria con vencimiento (TTL). Dos formas de leerla:
 //   - get(): solo devuelve el valor si todavía está fresco (para saber si
 //     hace falta salir a la red).
-//   - getStale(): devuelve lo último que se guardó AUNQUE ya haya vencido,
-//     sin borrarlo. Es el respaldo de la estrategia "network first" de acá
-//     abajo: si la red falla, mejor un precio con antigüedad conocida que
-//     ningún precio.
 class TtlCache<T> {
   private store = new Map<string, { value: T; expiresAt: number; savedAt: number }>();
 
@@ -162,10 +158,6 @@ class TtlCache<T> {
     if (!hit) return undefined;
     if (Date.now() > hit.expiresAt) return undefined;
     return hit.value;
-  }
-
-  getStale(key: string): T | undefined {
-    return this.store.get(key)?.value;
   }
 
   // Devuelve el valor solo si se guardó hace menos de `maxAgeMs`. Distinto de
@@ -192,9 +184,8 @@ const detailInFlight = new Map<string, Promise<Record<string, StorePriceDetail> 
 // (nunca se responde solo con lo que ya había en memoria, salvo que haya un
 // pedido idéntico en vuelo — eso sigue evitando duplicados, no reemplaza la
 // red por caché). El caché acá adentro es el PLAN B: si el pedido de red
-// falla (sin señal, timeout, Precios Claros caído), se devuelve el último
-// precio bueno que se haya visto para este producto+sucursales, aunque ya
-// esté vencido, en vez de dejar al producto sin precio. Antes era al revés
+// falla (sin señal, timeout, Precios Claros caído), no mostramos un precio
+// viejo como si fuera actual. Antes se devolvía un dato vencido
 // (cache-first con TTL: si había algo guardado de los últimos 30 minutos,
 // ni se llegaba a preguntarle a la red), lo cual podía mostrar un precio
 // desactualizado aunque hubiera señal de sobra para traer el de ahora.
@@ -276,11 +267,8 @@ export async function fetchStorePriceDetails(
       detailCache.set(cacheKey, final, PRICE_TTL_MS);
       return final;
     } catch {
-      // Red caída o Precios Claros no respondió: plan B de la estrategia
-      // network-first, ver el comentario de arriba de la función. Si nunca
-      // hubo un precio bueno guardado para esta key, seguimos devolviendo
-      // null como antes (no hay nada de qué agarrarse).
-      return detailCache.getStale(cacheKey) ?? null;
+      // No mostrar como vigente un precio viejo si la consulta de hoy falló.
+      return null;
     } finally {
       detailInFlight.delete(cacheKey);
     }
@@ -290,7 +278,6 @@ export async function fetchStorePriceDetails(
   return promise;
 }
 
-const priceCache = new TtlCache<Record<string, number> | null>();
 const priceInFlight = new Map<string, Promise<Record<string, number> | null>>();
 
 // Misma estrategia "network first" que fetchStorePriceDetails de arriba: el
@@ -299,8 +286,7 @@ const priceInFlight = new Map<string, Promise<Record<string, number> | null>>();
 // 30 minutos) — Y ADEMÁS `.has()` no existe en TtlCache, así que ni
 // compilaba (`tsc` lo frenaba en el build de Vercel aunque Turbopack lo
 // dejara pasar). Se saca esa línea entera: ahora siempre se sale a pedir de
-// nuevo, y el caché queda solo como plan B si la red falla (ver getStale
-// más abajo).
+// nuevo; si la red falla no se muestra un precio vencido como vigente.
 export async function fetchStorePrices(
   ean: string,
   stores: NearbyStore[]
@@ -350,13 +336,10 @@ export async function fetchStorePrices(
       }
 
       const final = Object.keys(result).length ? result : null;
-      priceCache.set(cacheKey, final, PRICE_TTL_MS);
       return final;
     } catch {
-      // Red caída: mejor el último precio bueno conocido (aunque ya esté
-      // vencido) que dejar el producto sin nada — mismo plan B que
-      // fetchStorePriceDetails.
-      return priceCache.getStale(cacheKey) ?? null;
+      // No mostrar como vigente un precio viejo si la consulta de hoy falló.
+      return null;
     } finally {
       priceInFlight.delete(cacheKey);
     }

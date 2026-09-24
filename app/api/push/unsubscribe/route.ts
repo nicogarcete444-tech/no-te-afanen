@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { getClientIp, isRateLimited } from '@/lib/apiSecurity';
+import { isRateLimited } from '@/lib/apiSecurity';
 
 export async function POST(request: NextRequest) {
-  if (isRateLimited('push-unsub:' + getClientIp(request), 20)) {
+  if (await isRateLimited(request, 'push-unsub', 20)) {
     return NextResponse.json({ error: 'Demasiados pedidos. Esperá un momento.' }, { status: 429 });
   }
 

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { fetchPreciosClaros } from '@/lib/preciosClarosBase';
-import { getClientIp, isRateLimited, parseLat, parseLimit, parseLng, RATE_LIMITS, sanitizeQuery } from '@/lib/apiSecurity';
+import { isRateLimited, parseLat, parseLimit, parseLng, RATE_LIMITS, sanitizeQuery } from '@/lib/apiSecurity';
 import { buildFallbackCandidates, isWholeMatch, rankByTokens } from '@/lib/searchFallback';
 import { relatedTerms } from '@/lib/searchAliases';
 
@@ -18,7 +18,7 @@ export const maxDuration = 30;
 // Por eso el bloqueo CORS de Precios Claros no aplica acá: el navegador
 // le habla a NUESTRO dominio, y nosotros le hablamos a Precios Claros por atrás.
 export async function GET(request: NextRequest) {
-  if (isRateLimited('productos:' + getClientIp(request), RATE_LIMITS.productos)) {
+  if (await isRateLimited(request, 'productos', RATE_LIMITS.productos)) {
     return NextResponse.json({ error: 'Demasiadas búsquedas. Esperá un momento.' }, { status: 429 });
   }
 
