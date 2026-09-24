@@ -1,3 +1,106 @@
+# Cambios de esta tanda (menos pedidos a Supabase)
+
+Esta vez el foco no fue el bundle sino la cantidad de idas y vueltas a
+Supabase — velocidad de las consultas y, de paso, cuántas se hacen (lo que
+más pesa en el costo, más que el tamaño de cada una).
+
+- **Campanita del header traía las 20 notificaciones completas en CADA
+  carga de página** (`components/Header.tsx`), con sesión iniciada, solo
+  para poder mostrar el numerito del puntito rojo — la lista de verdad
+  recién hace falta si la persona abre el panel. Ahora al montar se pide
+  nada más que el conteo (`getUnreadNotificationCount` en
+  `lib/priceAlerts.ts`, un `head: true` que cuenta en Postgres sin bajar
+  ninguna fila) y la lista completa (`getNotifications`, ya existía) se
+  pide recién la primera vez que se abre el panel, con un "Cargando
+  avisos…" mientras tanto. Mismo comportamiento de "marcar como leído" al
+  abrir, ahora sin depender de en qué orden terminen las dos consultas.
+- **Reabrir la misma ficha de producto repetía trabajo contra Supabase**
+  (`lib/priceHistory.ts`): cada vez que se abre una ficha se hace un upsert
+  a `tracked_products` (vía `/api/track-product`) y un select a
+  `price_snapshots` para el historial. Ir y viniendo entre dos o tres
+  productos en una sesión de compra (algo común: comparar "este vs. aquel")
+  repetía las dos consultas cada vez, aunque nada haya cambiado. Ahora hay
+  una memoria de 5 minutos en la pestaña (no en Supabase ni en
+  localStorage): el segundo `trackProduct`/`getPriceHistory` del mismo EAN
+  dentro de esa ventana no pega contra la base. Si el POST de tracking
+  falla, se saca de la memoria para que se reintente la próxima vez (no
+  queda "trackeado" de mentira).
+
+**Medido antes/después, sesión típica de alguien con cuenta que abre la
+portada y mira 3 fichas de producto**: 1 pedido a `price_drop_notifications`
+(liviano, antes traía 20 filas de a 8 columnas) en vez de 4 (uno completo
+por carga + ninguno reaprovechado); 3 pedidos a `tracked_products` +
+`price_snapshots` en vez de 6 (se salta el segundo/tercer producto si ya se
+había abierto antes en esos 5 minutos).
+
+**Si en cambio el cuello de botella real es otra cosa** (el catálogo tarda
+en la portada, el cron de historial, algo puntual de una pantalla): avisame
+cuál y sigo por ahí en vez de seguir buscando a ciegas en toda la base de
+código.
+
+---
+
+# Cambios de esta tanda (optimización)
+
+Medido con `next build` (Turbopack), JS que baja la portada `/` antes de poder usarse: **141,0 KB -> 104,9 KB gzip (-26%)**.
+
+- **Catálogo fuera del bundle inicial**: `lib/products.ts` (~1700 búsquedas, ~37-42 KB gzip) viajaba en el JS de la portada solo para elegir 12 búsquedas por tanda, y llegaba por dos caminos (`StoreApp` y `SearchBox` -> `relatedSearches`). Ahora es un chunk aparte que se baja después de pintar (`loadProductsLib` en `StoreApp`) y, en el buscador, recién al tocarlo. Lo que la portada necesita al arrancar (`HOME_TEASER_*`, `CATALOG_RESULTS_PER_QUERY`) quedó en `lib/homeTeaser.ts` (`products.ts` lo re-exporta, no se rompe ningún import).
+- **"Ofertas cerca tuyo" espera a la portada**: el barrido de ~18 pedidos arrancaba a la vez que las 10 búsquedas de la portada, compitiendo por red y por el tope de 120 consultas/min justo mientras se mira la portada. Ahora arranca cuando la portada termina de cargar (y no se repite para el mismo lugar).
+- Lo que ya estaba bien y no se tocó: `html5-qrcode` ya se importaba recién al abrir el escáner; el caché de precios de listas (tanda anterior) evita repetir pedidos.
+
+---
+
+# Cambios de esta tanda (caza de bugs)
+
+**Seguridad**
+- `app/auth/callback/route.ts`: open redirect. `next=@evil.com` armaba `https://tusitio.com@evil.com` y redirigía a un sitio ajeno tras el login. Ahora solo se aceptan rutas internas (`/algo`).
+- `supabase/schema.sql` (**hay que volver a correrlo en Supabase**): `compare_usage` todavía tenía policies de insert/update para el usuario. `register_compare_use` devuelve `allowed: true` sin gastar un uso si la firma del carrito ya está en `revealed_signatures`, y esa columna la podía escribir el usuario directo: comparaciones ilimitadas en el plan free. Se sacaron las policies; solo escribe la función (SECURITY DEFINER).
+- `lib/sharedCart.ts`: el carrito de un link `?carrito=` se reconstruye validado (ids `live:`, cantidad entera 1-99, textos acotados, EAN solo dígitos). Antes un link armado a mano con un nombre que no era texto dejaba la pantalla en blanco o metía cantidades absurdas.
+
+**Funcionales**
+- **Seguir precio desde la campanita de la tarjeta no funcionaba** para productos que nadie abrió antes: `price_alerts.ean` es foreign key a `tracked_products`, que solo se llenaba al abrir la ficha. El insert fallaba en silencio y la pantalla decía "Dejaste de seguir este precio". Ahora `toggleWatch` registra el producto primero, y si igual falla avisa que no se pudo.
+- **Carrito de invitado perdido al crear la cuenta** (`lib/cart.ts`): "Comparar ahora" pide cuenta, así que el recorrido típico es armar el carrito, tocar comparar, registrarse... y ver el carrito vacío. Si la cuenta no tiene carrito guardado, se lleva el del invitado y recién se borra la copia local cuando la de la cuenta quedó guardada.
+- **"Ya usaste tus 3 comparaciones" ante un corte de red** (`lib/compareLimit.ts`): un fallo de conexión se devolvía como "tope alcanzado" y trababa el botón hasta recargar. Ahora avisa que fue la conexión y deja reintentar sin tocar el contador.
+- **Cambio de cadena "Diarco" = "Día"** (`lib/chains.ts`, nuevo): `includes('dia')` hacía que Diarco saliera con el logo, el nombre y el link de compra de Día (y ocupara un lugar de cadena nacional). Ahora Día se reconoce solo como palabra. También en el cron de historial, que guardaba los precios de Diarco como si fueran de Día.
+- **Ráfaga de pedidos que pisaba el rate limit** (`lib/storePrices.ts`): con el "network first", cada tarjeta, el feed de ofertas y la comparación general repetían todo el barrido contra `/api/producto` (tope 120/min) cada vez que crecía el catálogo; los comentarios decían que compartían caché y ya no era cierto. `fetchStorePriceDetails` acepta `maxAgeMs`: las listas usan 5 minutos (el server ya cachea 6 h, así que no se pierde frescura real); ficha, agregar al carrito y "Actualizar" siguen yendo siempre a la red.
+- **Precio de promo más caro que el de lista** (`fetchStorePriceDetails` y cron): si la promo figuraba más cara que la lista (promos por cantidad), se mostraba esa. Ahora se usa el más bajo de los dos, como ya hacía `fetchStorePrices`.
+- **Productos sin precios quedaban "frescos" 6 horas**: al agregar al carrito un producto sin ningún precio se marcaba `pricedAt = ahora`, y "Comparar" no lo refrescaba hasta 6 h después. Ahora sin precios no se marca fecha.
+- **Aviso de tope al cargar un changuito** (`StoreApp.handleMergeCartTemplate`): el contador `skipped` se incrementaba dentro del updater de `setSelected`, que React corre después: el cartel "N productos no se agregaron" nunca salía.
+- **Carrito que se pisaba al refrescar precios** (`refreshPricesNow`): reemplazaba todo `liveProducts` con la copia de cuando arrancó el pedido; un producto agregado mientras tanto desaparecía de la comparación. Ahora se aplican solo los precios refrescados sobre el estado actual.
+- **`liveProducts` crecía sin límite** dentro de la fila del carrito (Supabase) / localStorage del invitado: agregar y sacar productos nunca los borraba. Ahora se guarda solo lo que sigue en el carrito.
+- **Escáner con código desconocido**: "Buscar otra cosa" no hacía nada (el código escaneado seguía puesto y la pantalla quedaba clavada en "Sin resultados para vacío"). Ahora limpia todo y el cartel nombra el código.
+- "Inicio" en la barra de abajo ahora también vuelve el filtro del catálogo a "Todos".
+- `SavingsHistoryModal`: los textos hablaban de "confirmar una lista" y de "Comparación por súper" (ni el botón ni la sección se llaman así); ahora dicen "Agregar a mis ahorros" y "Dónde conviene hoy".
+- Se sacó el 🔒 que quedaba en "Ya usaste tus 3 comparaciones".
+
+**Cron de historial de precios** (`lib/priceSnapshotWorker.ts`, `app/api/cron/snapshot-prices/route.ts`)
+- Los avisos de "Subió de precio" podían ser falsos: se comparaba el mínimo de la corrida anterior contra el de hoy aunque cambiaran las cadenas que informaron el producto (si la más barata dejaba de informarlo un día, "subía"). Ahora se compara solo entre cadenas presentes en las dos corridas, y la corrida anterior se toma por fecha de captura, no por "las últimas 6 filas".
+- Sin timeout en los pedidos y sin `maxDuration`: 40 productos en serie no entraban en la función serverless y la cola se cortaba siempre en el mismo punto. Ahora hay timeout por pedido, de a 4 en paralelo y `maxDuration = 60`.
+
+**Sin tocar (a propósito)**: alta Premium manual por WhatsApp, links de compra de Día/ChangoMas a la home, carrito/ahorro de invitado en localStorage.
+
+---
+
+# Cambios de esta tanda (UX: texto que prometía un botón inexistente)
+
+`components/SavingsCard.tsx`: el cartel de "Ahorrá este mes" (vacío o con historial) decía "confirmá la lista" / "tus listas confirmadas" — ese botón nunca existió, el real dice "Agregar $X a mis ahorros" (`CompareSection.tsx`). Alguien nuevo siguiendo la instrucción literal no iba a encontrar nada. Se corrigió el texto para que diga lo mismo que el botón real. Solo texto, ninguna función nueva ni sacada.
+
+# Cambios de esta tanda (mejora de UX: búsqueda sin resultados)
+
+`components/StoreApp.tsx` / `app/globals.css`: el cartel de "Sin resultados para X" era un punto muerto — justo la duda que anduvo dando vueltas en esta sesión con "chedar", "lechuga suelta", etc. (¿está mal escrito? ¿no existe? ¿hay que probar otra cosa?). Nuevo componente `SearchEmptyState`: explica en una línea por qué puede pasar (nombre distinto al que carga el súper, o es algo suelto sin código de barra) y da dos botones concretos — "Buscar otra cosa" (limpia el buscador) y "Escanear código" (abre la cámara). Se usa en los dos lugares donde antes quedaba la búsqueda en punto muerto (modo búsqueda en vivo y catálogo normal).
+
+# Cambios de esta tanda (50 sinónimos más)
+
+Misma lógica, tanda grande: 50 entradas nuevas en `lib/searchAliases.ts` — regionalismos de México/España/otros países (fresa→frutilla, platano→banana, patata→papa, calabaza→zapallo, boniato→batata, cloro→lavandina, frijoles→porotos, cacahuete→mani, pimiento→morron, etc.), algunas de limpieza/higiene (detergente, lavaplatos, cepillo de dientes, bateria→pilas) y un grupo en inglés (milk, butter, cheese, chicken, eggs, bread, tuna, peanut butter). Cada valor de la derecha se verificó contra queries reales que ya existen en `lib/products.ts` antes de escribirlo — ninguno inventado.
+
+# Cambios de esta tanda (más sinónimos, mismo estilo)
+
+Se sumó otra tanda de sinónimos a `lib/searchAliases.ts`: `bacon`→panceta, `tocino`→panceta, `mantequilla`→manteca, `yogurt`→yogur (sin la t), `aguacate`→palta, `pickles`→pepinillos, `palomitas`→pochoclo, `papita`→papas fritas snack, `cola`→gaseosa cola. Todas verificadas contra queries reales que ya existen en `lib/products.ts`, ninguna inventada.
+
+# Cambios de esta tanda (buscador: "cheddar"/"chedar" sin resultados)
+
+No era bug de búsqueda — era que "cheddar" no estaba en ningún lado como sinónimo (ver `SYNONYMS` en `lib/searchAliases.ts`), así que ni escrito bien traía nada: Precios Claros no carga ese nombre tal cual bajo la mayoría de las marcas. Se agregó `cheddar` y `chedar` (el typo más común, sin la segunda d) apuntando a los quesos de máquina/fundir que sí están cargados (tybo, mozzarella, pategras, queso cheddar de la marca que lo tenga). De paso el sinónimo de `queso` a secas también suma mozzarella/tybo/pategras, que faltaban.
+
 # Cambios de esta tanda (build roto en Vercel)
 
 `npm run build` tiraba `exited with 1` en Vercel por 2 errores de TypeScript que Turbopack no frena en local pero `tsc` sí (no eran de mis cambios anteriores, ya estaban en el repo):

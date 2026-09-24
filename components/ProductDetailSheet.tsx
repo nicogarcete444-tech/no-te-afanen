@@ -2,7 +2,8 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { CATEGORY_COLORS, fmt } from '@/lib/products';
+import { CATEGORY_COLORS } from '@/lib/categories';
+import { fmt } from '@/lib/format';
 import { getProductImageUrl } from '@/lib/productImage';
 import { fetchStorePriceDetails, NearbyStore, StorePriceDetail } from '@/lib/storePrices';
 import { getStoreBuyUrl } from '@/lib/storeLinks';

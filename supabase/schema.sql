@@ -358,9 +358,8 @@ create policy "premium_status_select_own" on public.premium_status
 -- Free: 3 comparaciones de carrito por semana (ver FREE_COMPARE_LIMIT en
 -- lib/compareLimit.ts). Premium no tiene tope. Cada fila es "cuántas veces
 -- ya comparó este usuario en la semana que arranca en week_start" (lunes).
--- A diferencia de premium_status, acá el usuario SÍ puede escribir su
--- propia fila (insert/update): no hay nada que "otorgarse" de gratis, solo
--- se está contando un uso real que él mismo hizo.
+-- Igual que premium_status, el usuario solo puede LEER su fila: la escribe
+-- únicamente register_compare_use (ver más abajo).
 
 create table if not exists public.compare_usage (
   user_id uuid not null references auth.users (id) on delete cascade,
@@ -388,13 +387,15 @@ drop policy if exists "compare_usage_select_own" on public.compare_usage;
 create policy "compare_usage_select_own" on public.compare_usage
   for select using (auth.uid() = user_id);
 
+-- Sin policy de insert/update para el usuario, a propósito. Toda la escritura
+-- pasa por register_compare_use (SECURITY DEFINER, más abajo). Antes había
+-- policies de insert/update "propias" y eso dejaba un agujero: la función
+-- devuelve allowed=true, sin gastar un uso, si la firma del carrito ya está
+-- en revealed_signatures — y el usuario podía escribir ESA columna directo con
+-- un update (el trigger de abajo solo vigila `count`), cargándose la firma de
+-- cualquier carrito y comparando sin límite.
 drop policy if exists "compare_usage_insert_own" on public.compare_usage;
-create policy "compare_usage_insert_own" on public.compare_usage
-  for insert with check (auth.uid() = user_id);
-
 drop policy if exists "compare_usage_update_own" on public.compare_usage;
-create policy "compare_usage_update_own" on public.compare_usage
-  for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
 -- ============================================================
 -- Los topes free, aplicados en la BASE (no solo en el navegador)

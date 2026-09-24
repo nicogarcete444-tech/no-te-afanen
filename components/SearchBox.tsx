@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { getRelatedSearches } from '@/lib/relatedSearches';
 
 export default function SearchBox({
   value,
@@ -35,7 +34,21 @@ export default function SearchBox({
     };
   }, [focused]);
 
-  const suggestions = focused ? getRelatedSearches(value) : [];
+  // relatedSearches arrastra el catálogo completo (~40 KB comprimido): se baja
+  // recién cuando la persona toca el buscador, no en la carga inicial.
+  const [related, setRelated] = useState<((q: string) => string[]) | null>(null);
+  useEffect(() => {
+    if (!focused || related) return;
+    let cancelled = false;
+    import('@/lib/relatedSearches').then((m) => {
+      if (!cancelled) setRelated(() => m.getRelatedSearches);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [focused, related]);
+
+  const suggestions = focused && related ? related(value) : [];
 
   function selectSuggestion(term: string) {
     onChange(term);

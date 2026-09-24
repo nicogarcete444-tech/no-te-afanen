@@ -69,15 +69,39 @@ export function buildShareUrl(
   }
 }
 
-function isValidPayload(v: any): v is SharedCartPayload {
-  return (
-    v &&
-    typeof v === 'object' &&
-    v.items &&
-    typeof v.items === 'object' &&
-    v.products &&
-    typeof v.products === 'object'
-  );
+// Lo que viene en el link lo armó cualquiera, no necesariamente nuestra app:
+// se reconstruye entero con valores conocidos en vez de confiar en el JSON.
+// Antes solo se chequeaba que `items` y `products` fueran objetos, así que un
+// link a mano con una cantidad en texto, un nombre que no es texto (React
+// tira "Objects are not valid as a React child" y la pantalla queda en
+// blanco) o miles de productos entraba tal cual al carrito.
+const MAX_QTY = 99;
+
+function sanitizePayload(v: any): SharedCartPayload | null {
+  if (!v || typeof v !== 'object' || !v.items || typeof v.items !== 'object' || !v.products || typeof v.products !== 'object') {
+    return null;
+  }
+  const items: CartMap = {};
+  const products: Record<string, SharedCartProduct> = {};
+
+  for (const id of Object.keys(v.items)) {
+    if (Object.keys(items).length >= MAX_SHARED_ITEMS) break;
+    // Mismo formato que arma cartIdFor (lib/liveItems.ts): "live:<ean o texto>".
+    if (!id.startsWith('live:') || id.length > 300) continue;
+    const qty = Math.floor(Number(v.items[id]));
+    const p = v.products[id];
+    if (!Number.isFinite(qty) || qty < 1 || !p || typeof p !== 'object') continue;
+    if (typeof p.name !== 'string' || !p.name.trim()) continue;
+
+    items[id] = Math.min(qty, MAX_QTY);
+    products[id] = {
+      name: p.name.slice(0, 200),
+      category: typeof p.category === 'string' ? p.category.slice(0, 60) : 'Otros',
+      ean: typeof p.ean === 'string' && /^\d{4,20}$/.test(p.ean) ? p.ean : null,
+    };
+  }
+
+  return Object.keys(items).length ? { items, products } : null;
 }
 
 export function readSharedCartFromUrl(): SharedCartPayload | null {
@@ -86,7 +110,7 @@ export function readSharedCartFromUrl(): SharedCartPayload | null {
   if (!raw) return null;
   try {
     const parsed = JSON.parse(fromBase64Url(raw));
-    return isValidPayload(parsed) ? parsed : null;
+    return sanitizePayload(parsed);
   } catch {
     return null;
   }

@@ -74,6 +74,15 @@ function saveGuestCart(cart: StoredCart): boolean {
 // de localStorage. Si hay usuario logueado, lo lee de Supabase; si todavía
 // no tiene fila en `carts` (usuario nuevo), devuelve el carrito vacío sin
 // error.
+//
+// Si la cuenta todavía no tiene carrito guardado y el invitado había armado
+// uno en este dispositivo, se lo lleva consigo: "Comparar ahora" pide cuenta,
+// así que el recorrido típico es armar el carrito, tocar comparar, crear la
+// cuenta... y encontrarse con el carrito VACÍO (seguía en localStorage, pero
+// con sesión iniciada nunca se leía). Ver también saveCart, que limpia la
+// copia local recién cuando la de la cuenta quedó guardada.
+let guestCartPendingMigration = false;
+
 export async function loadCart(userId: string | null): Promise<StoredCart> {
   if (!userId) return loadGuestCart();
 
@@ -84,10 +93,21 @@ export async function loadCart(userId: string | null): Promise<StoredCart> {
     .eq('user_id', userId)
     .maybeSingle();
 
-  if (error || !data) return EMPTY_CART;
+  if (error) return EMPTY_CART;
 
+  const remoteItems = ((data?.items as CartMap) || {}) as CartMap;
+  const remoteHasItems = Object.values(remoteItems).some((q) => Number(q) > 0);
+  if (!remoteHasItems) {
+    const guest = loadGuestCart();
+    if (Object.values(guest.items).some((q) => Number(q) > 0)) {
+      guestCartPendingMigration = true;
+      return guest;
+    }
+  }
+
+  if (!data) return EMPTY_CART;
   return {
-    items: (data.items as CartMap) || {},
+    items: remoteItems,
     liveProducts: normalizeProducts(data.live_products),
   };
 }
@@ -107,6 +127,17 @@ export async function saveCart(userId: string | null, cart: StoredCart): Promise
     live_products: cart.liveProducts,
     updated_at: new Date().toISOString(),
   });
+
+  if (!error && guestCartPendingMigration) {
+    // El carrito de invitado ya quedó en la cuenta: se borra la copia local
+    // para que no reaparezca al cerrar sesión ni se pise con otro más nuevo.
+    guestCartPendingMigration = false;
+    try {
+      window.localStorage.removeItem(GUEST_CART_KEY);
+    } catch {
+      // sin storage: no pasa nada, en el peor caso queda la copia vieja
+    }
+  }
 
   return !error;
 }

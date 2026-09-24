@@ -64,11 +64,43 @@ export async function toggleWatch(userId: string, ean: string, nombre: string, c
     const { error } = await supabase.from('price_alerts').delete().eq('user_id', userId).eq('ean', ean);
     return error ? true : false;
   }
+  // price_alerts.ean es una foreign key a tracked_products (schema.sql), y
+  // esa tabla solo se llena cuando alguien abre la FICHA del producto. Con la
+  // campanita de las tarjetas se puede seguir un producto sin haberlo abierto
+  // nunca: el insert reventaba por la foreign key, toggleWatch devolvía false
+  // y la pantalla decía "Dejaste de seguir este precio" sin haber pasado
+  // nada. Se registra el producto primero (y se ESPERA), después la alerta.
+  try {
+    await fetch('/api/track-product', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ean, nombre }),
+    });
+  } catch {
+    // si falla, igual se intenta el insert: si el producto ya estaba
+    // registrado (lo abrieron antes) anda igual.
+  }
   const { error } = await supabase.from('price_alerts').upsert(
     { user_id: userId, ean, nombre },
     { onConflict: 'user_id,ean' }
   );
   return error ? false : true;
+}
+
+// Solo el número de avisos sin leer, para la campanita del header. Antes el
+// header traía las 20 filas completas (getNotifications) en CADA carga de
+// página con sesión iniciada, solo para poder mostrar el puntito rojo con un
+// conteo — la lista de verdad recién se necesita si la persona abre el
+// panel. Un `head: true` con filtro cuenta en Postgres sin bajar ninguna
+// fila (mucho más liviano que traer las 20 y sus 8 columnas cada vez).
+export async function getUnreadNotificationCount(userId: string): Promise<number> {
+  const supabase = createClient();
+  const { count } = await supabase
+    .from('price_drop_notifications')
+    .select('id', { count: 'exact', head: true })
+    .eq('user_id', userId)
+    .is('read_at', null);
+  return count ?? 0;
 }
 
 export async function getNotifications(userId: string, limit = 20): Promise<PriceDropNotification[]> {

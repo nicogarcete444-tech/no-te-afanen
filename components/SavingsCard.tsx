@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { fmt } from '@/lib/products';
+import { fmt } from '@/lib/format';
 import StoreLogo, { chainLabel } from './StoreLogo';
 
 // La tarjeta de ahorro: el hero de la portada.
@@ -117,8 +117,8 @@ export default function SavingsCard({
         <div className="savings-amount">{fmt(savings)}</div>
         <div className="savings-detail">
           {savings > 0
-            ? 'De tus listas confirmadas este mes.'
-            : 'Armá tu carrito y confirmá la lista: el ahorro se suma acá.'}
+            ? 'De lo que agregaste a tus ahorros este mes.'
+            : 'Armá tu carrito, compará precios y tocá "Agregar a mis ahorros": la diferencia se suma acá.'}
         </div>
       </div>
 

@@ -3,7 +3,7 @@
 import { ReactNode, useEffect, useState } from 'react';
 import { extractEan, LiveItem } from '@/lib/liveItems';
 import { mapWithConcurrency } from '@/lib/nearbyDeals';
-import { fetchStorePriceDetails, NearbyStore, StorePriceDetail } from '@/lib/storePrices';
+import { fetchStorePriceDetails, LIST_PRICE_MAX_AGE_MS, NearbyStore, StorePriceDetail } from '@/lib/storePrices';
 import StoreTotalRows, { TotalRow } from './StoreTotalRows';
 
 // Comparación general, para cuando el carrito está vacío: en vez de dejar el
@@ -35,7 +35,7 @@ async function buildComparison(pool: LiveItem[], stores: NearbyStore[]): Promise
   }
   if (eans.length < BASKET_MIN) return null;
 
-  const details = await mapWithConcurrency(eans, 4, (ean) => fetchStorePriceDetails(ean, stores));
+  const details = await mapWithConcurrency(eans, 4, (ean) => fetchStorePriceDetails(ean, stores, { maxAgeMs: LIST_PRICE_MAX_AGE_MS }));
 
   // Cadenas ordenadas por cuántos productos de la canasta tienen precio
   // (si hay empate, el orden en que ya vienen: primero las cadenas

@@ -11,14 +11,16 @@
 // <img> para que el navegador reserve el espacio antes de que cargue (evita
 // el salto de layout) sin forzar un recorte, porque cada logo tiene su
 // propio aspect ratio.
+import { isCarrefour, isChangomas, isCoto, isDia, isDisco, isFarmacity, isJumbo } from '@/lib/chains';
+
 const LOGO_MATCHERS: { test: (n: string) => boolean; src: string; alt: string; intrinsicWidth: number; intrinsicHeight: number }[] = [
-  { test: (n) => n.includes('carrefour'), src: '/logos/carrefour.webp', alt: 'Carrefour', intrinsicWidth: 317, intrinsicHeight: 180 },
-  { test: (n) => n.includes('changomas') || n.includes('chango mas'), src: '/logos/changomas.webp', alt: 'Changomás', intrinsicWidth: 180, intrinsicHeight: 180 },
-  { test: (n) => n.includes('disco'), src: '/logos/disco.webp', alt: 'Disco', intrinsicWidth: 180, intrinsicHeight: 180 },
-  { test: (n) => n.includes('jumbo'), src: '/logos/jumbo.webp', alt: 'Jumbo', intrinsicWidth: 180, intrinsicHeight: 180 },
-  { test: (n) => n.includes('coto'), src: '/logos/coto.webp', alt: 'Coto', intrinsicWidth: 539, intrinsicHeight: 180 },
-  { test: (n) => n.includes('dia') || n.includes('día'), src: '/logos/dia.webp', alt: 'Día', intrinsicWidth: 293, intrinsicHeight: 180 },
-  { test: (n) => n.includes('farmacity'), src: '/logos/farmacity.svg', alt: 'Farmacity', intrinsicWidth: 180, intrinsicHeight: 180 },
+  { test: isCarrefour, src: '/logos/carrefour.webp', alt: 'Carrefour', intrinsicWidth: 317, intrinsicHeight: 180 },
+  { test: isChangomas, src: '/logos/changomas.webp', alt: 'Changomás', intrinsicWidth: 180, intrinsicHeight: 180 },
+  { test: isDisco, src: '/logos/disco.webp', alt: 'Disco', intrinsicWidth: 180, intrinsicHeight: 180 },
+  { test: isJumbo, src: '/logos/jumbo.webp', alt: 'Jumbo', intrinsicWidth: 180, intrinsicHeight: 180 },
+  { test: isCoto, src: '/logos/coto.webp', alt: 'Coto', intrinsicWidth: 539, intrinsicHeight: 180 },
+  { test: isDia, src: '/logos/dia.webp', alt: 'Día', intrinsicWidth: 293, intrinsicHeight: 180 },
+  { test: isFarmacity, src: '/logos/farmacity.svg', alt: 'Farmacity', intrinsicWidth: 180, intrinsicHeight: 180 },
 ];
 
 export function getStoreLogo(

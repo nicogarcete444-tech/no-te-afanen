@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { fmt } from '@/lib/products';
+import { fmt } from '@/lib/format';
 import { getProductImageUrl } from '@/lib/productImage';
 import { findNearbyDeals, NearbyDeal } from '@/lib/nearbyDeals';
 import { getInitials, getMonogramIndex } from '@/lib/monogram';
@@ -114,7 +114,7 @@ export default function NearbyDealsFeed({
       category: openProduct.category,
       prices: priceByStore,
       ean: openProduct.ean,
-      pricedAt: Date.now(),
+      pricedAt: Object.keys(priceByStore).length ? Date.now() : undefined,
       icon: '',
     });
     setOpenProduct(null);

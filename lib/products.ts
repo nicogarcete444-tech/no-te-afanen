@@ -1,56 +1,12 @@
-// Verdulería se sacó de la lista de rubros (chips y píldoras de filtro). Ojo: sus
-// búsquedas en RAW_CATALOG_QUERIES NO se borraron, porque el buscador las usa
-// para las búsquedas relacionadas y los alias (relatedSearches.ts y
-// searchAliases.ts).
-export const CATEGORIES = ['Todos', 'Lácteos', 'Almacén', 'Carnes', 'Limpieza', 'Bebidas', 'Perfumería', 'Frescos', 'Congelados', 'Mascotas'];
+// CATEGORIES, CATALOG_BROWSE_DISABLED y CATEGORY_COLORS ahora viven en
+// ./categories (son livianos y varios componentes chicos los importaban
+// solo a ellos, sin necesitar las ~240 búsquedas de más abajo). Se
+// reexportan acá para no tener que tocar todos los imports existentes de
+// este archivo (StoreApp, relatedSearches, searchAliases, etc.).
+export { CATEGORIES, CATALOG_BROWSE_DISABLED, CATEGORY_COLORS } from './categories';
 
-// Rubros que NO arman vidriera automática (las ~12 búsquedas fijas de
-// catalogQueriesFor). Verdulería es el caso: la fruta y verdura suelta casi
-// nunca tiene código de barra (EAN), que es sobre lo que está armada Precios
-// Claros — cada tanda de "cebolla por kilo", "tomate por kilo", etc. volvía
-// vacía casi siempre, no por una falla pasajera sino porque ese dato
-// directamente no está en la fuente. En vez de mostrar "0 productos" cada
-// vez, el rubro queda disponible solo por búsqueda (el buscador principal,
-// que además prueba términos relacionados y aproximados) y por escaneo de
-// código de barra — los productos envasados de verdulería (bolsas de
-// ensalada, verdura congelada en el momento, etc.) sí pueden tener EAN y
-// aparecer ahí.
-export const CATALOG_BROWSE_DISABLED: string[] = ['Verdulería'];
-
-export const CATEGORY_COLORS: Record<string, [string, string]> = {
-  'Lácteos': ['#7FC4F5', '#2E74C9'],
-  'Almacén': ['#FFC978', '#DD8A1E'],
-  'Limpieza': ['#8FE0B8', '#279B63'],
-  'Bebidas': ['#FF9C89', '#D94E38'],
-  'Perfumería': ['#E3A6E0', '#9C3FA0'],
-  'Carnes': ['#F0A3AE', '#B8384F'],
-  'Frescos': ['#B7E39A', '#5C9E3A'],
-  'Verdulería': ['#A9E06B', '#5B8C1E'],
-  'Congelados': ['#9FD8F0', '#2B7FA3'],
-  'Mascotas': ['#D8B48C', '#8B5E34'],
-};
-
-// Vidriera de la página principal (rubro "Todos", sin buscar nada). Son 10
-// productos bien variados — uno de cada rubro (Lácteos, Almacén, Limpieza,
-// Bebidas, Perfumería, Frescos, Congelados, Mascotas) más dos
-// básicos extra — para que la portada cargue rápido y muestre variedad real
-// sin amontonar. El catálogo completo se sigue usando al elegir un rubro
-// puntual en los chips o al buscar algo.
-export const HOME_TEASER_QUERIES: { category: string; query: string }[] = [
-  { category: 'Lácteos', query: 'leche entera' },
-  { category: 'Lácteos', query: 'huevos' },
-  { category: 'Almacén', query: 'yerba mate' },
-  { category: 'Almacén', query: 'arroz' },
-  { category: 'Limpieza', query: 'papel higienico' },
-  { category: 'Bebidas', query: 'agua mineral' },
-  { category: 'Perfumería', query: 'shampoo' },
-  { category: 'Carnes', query: 'pollo' },
-  { category: 'Congelados', query: 'hamburguesa congelada' },
-  { category: 'Mascotas', query: 'alimento balanceado para perros' },
-];
-
-// Cuántos productos se muestran en la vidriera de la página principal.
-export const HOME_TEASER_LIMIT = 10;
+// (HOME_TEASER_* viven en ./homeTeaser, ver arriba.)
+export { HOME_TEASER_QUERIES, HOME_TEASER_LIMIT, HOME_TEASER_RESULTS_PER_QUERY, CATALOG_RESULTS_PER_QUERY } from './homeTeaser';
 
 // Ya no hay precios inventados a mano. El "catálogo" completo (al elegir un
 // rubro puntual, o al buscar) también sale de Precios Claros: disparamos estas
@@ -5117,9 +5073,6 @@ const RAW_CATALOG_QUERIES: { category: string; query: string }[] = [
   { category: 'Perfumería', query: 'shampoo en seco sin enjuague' },
 ];
 
-// Cuántos resultados le pedimos a Precios Claros por cada búsqueda de la
-// vidriera.
-export const CATALOG_RESULTS_PER_QUERY = 8;
 
 // Cuántas búsquedas de un rubro se disparan POR TANDA.
 //
@@ -5230,15 +5183,8 @@ export function catalogPagesFor(category: string): number {
   return Math.max(1, Math.ceil(total / CATALOG_QUERIES_PER_PAGE) + (pinned?.length ? 1 : 0));
 }
 
-// En la portada pedimos varios resultados por búsqueda (no 1 solo, ni los 8
-// del catálogo completo): con 1 solo, si justo ESE producto no tenía foto
-// cargada en las bases (pasa seguido, son crowdsourced), la portada quedaba
-// con el ícono gris de respaldo. Con 4 candidatos por rubro, StoreApp elige
-// el primero que sí tenga foto (pickHomeTeaserWithPhotos) y si ninguno tiene,
-// recién ahí cae al primero sin foto — sigue siendo un solo producto por
-// rubro, no se llena con marcas repetidas.
-export const HOME_TEASER_RESULTS_PER_QUERY = 4;
 
-export function fmt(n: number): string {
-  return '$' + Math.round(n).toLocaleString('es-AR');
-}
+// fmt ahora vive en ./format (liviano, lo importan casi todos los
+// componentes de la UI que no necesitan el resto de este archivo).
+// Reexportado acá para no romper los imports existentes.
+export { fmt } from './format';

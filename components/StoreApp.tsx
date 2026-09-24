@@ -6,16 +6,22 @@ import { useRouter } from 'next/navigation';
 import { loadCart, saveCart, StoredCart } from '@/lib/cart';
 import { createClient } from '@/lib/supabase/client';
 import { CartMap, Product } from '@/lib/types';
+import { CATEGORIES, CATALOG_BROWSE_DISABLED } from '@/lib/categories';
 import {
-  CATEGORIES,
-  CATALOG_BROWSE_DISABLED,
   CATALOG_RESULTS_PER_QUERY,
   HOME_TEASER_QUERIES,
   HOME_TEASER_LIMIT,
   HOME_TEASER_RESULTS_PER_QUERY,
-  catalogPagesFor,
-  catalogQueriesFor,
-} from '@/lib/products';
+} from '@/lib/homeTeaser';
+
+// El catálogo completo (~1700 búsquedas, ~40 KB comprimido) ya no viaja en el
+// bundle inicial: se baja aparte, sin bloquear la portada. Ver loadProductsLib.
+type ProductsLib = typeof import('@/lib/products');
+let productsLibPromise: Promise<ProductsLib> | null = null;
+function loadProductsLib(): Promise<ProductsLib> {
+  if (!productsLibPromise) productsLibPromise = import('@/lib/products');
+  return productsLibPromise;
+}
 import { cartStats, estimatedStoreTotals } from '@/lib/cartStats';
 import { formatAge, oldestPricedAt, refreshCartPrices } from '@/lib/cartPrices';
 import { getMonthlyHistory, migrateGuestSavingsToAccount } from '@/lib/savingsHistory';
@@ -105,6 +111,45 @@ async function pickHomeTeaserWithPhotos(slots: LiveItem[][]): Promise<LiveItem[]
 // 600ms típicos que tarda `loadCart` contra Supabase, y bastante más en una
 // red mala. Con esta silueta la persona ve de una que entró a la app real
 // (misma altura, mismos bloques) mientras el carrito termina de llegar.
+// Estado vacío de una búsqueda sin resultados. Antes era un cartel muerto
+// ("Sin resultados para X") que dejaba a la persona sin saber si escribió
+// mal, si el producto no existe, o si hay que probar otra cosa — exactamente
+// las dudas que iban y venían por acá con "chedar", "lechuga suelta", etc.
+// Ahora explica en una línea por qué puede pasar (sin asustar, es la
+// limitación real de la fuente de datos) y da dos salidas concretas en vez
+// de dejarla en un punto muerto.
+function SearchEmptyState({
+  term,
+  onClear,
+  onScan,
+}: {
+  term: string;
+  onClear: () => void;
+  onScan: () => void;
+}) {
+  return (
+    <div className="empty-state">
+      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" />
+      </svg>
+      <div>Sin resultados para &quot;{term}&quot; en Precios Claros.</div>
+      <div className="empty-state-hint">
+        Puede que esté escrito distinto a como lo carga el súper, o que sea
+        algo suelto (verdura, fiambre) sin código de barra — eso Precios
+        Claros no lo tiene, escrito como sea.
+      </div>
+      <div className="empty-state-actions">
+        <button className="cta-btn secondary" onClick={onClear}>
+          Buscar otra cosa
+        </button>
+        <button className="cta-btn secondary" onClick={onScan}>
+          Escanear código
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function AppShellSkeleton() {
   return (
     <div className="app-shell-skeleton" aria-hidden="true">
@@ -335,6 +380,21 @@ export default function StoreApp({
   // de cada uno...), de donde salen las "Ofertas cerca tuyo".
   const [dealsSweep, setDealsSweep] = useState<LiveItem[]>([]);
 
+  // Catálogo completo, cuando ya bajó (null mientras tanto). Solo lo usa el
+  // render para saber cuántas tandas tiene un rubro; mientras no llegó se
+  // asume 1, y las funciones que piden datos lo esperan por su cuenta.
+  const [productsLib, setProductsLib] = useState<ProductsLib | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    loadProductsLib().then((lib) => {
+      if (!cancelled) setProductsLib(lib);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  const catalogPagesFor = (cat: string) => (productsLib ? productsLib.catalogPagesFor(cat) : 1);
+
   const [nearbyStores, setNearbyStores] = useState<NearbyStore[]>([]);
   const [storesStatus, setStoresStatus] = useState('');
   // Arranca en Buenos Aires y NO en null: antes esto se quedaba en null hasta
@@ -497,7 +557,6 @@ export default function StoreApp({
     let cancelled = false;
     const BATCH_SIZE = 6;
     const isHome = activeCategory === 'Todos';
-    const queries = isHome ? HOME_TEASER_QUERIES : catalogQueriesFor(activeCategory, catalogPage);
     const resultsPerQuery = isHome ? HOME_TEASER_RESULTS_PER_QUERY : CATALOG_RESULTS_PER_QUERY;
     const isFirstPage = catalogPage === 0;
 
@@ -554,6 +613,10 @@ export default function StoreApp({
     }
 
     async function loadCatalog() {
+      const queries = isHome
+        ? HOME_TEASER_QUERIES
+        : (await loadProductsLib()).catalogQueriesFor(activeCategory, catalogPage);
+      if (cancelled) return;
       const merged: LiveItem[] = [];
       // Solo para el inicio: candidatos por búsqueda, en el mismo orden que
       // HOME_TEASER_QUERIES, para poder elegir después el que tenga foto
@@ -628,7 +691,15 @@ export default function StoreApp({
     if (saveDebounce.current) clearTimeout(saveDebounce.current);
     saveDebounce.current = setTimeout(async () => {
       setSyncing(true);
-      const ok = await saveCart(userId, { items: selected, liveProducts });
+      // Solo se guardan los productos que siguen en el carrito. liveProducts
+      // acumula todo lo que alguna vez se tocó (agregar y sacar no lo borra),
+      // y ese objeto crecía sin límite dentro de la fila del carrito
+      // (Supabase) o del localStorage del invitado (tope ~5 MB).
+      const liveInCart: Record<string, Product> = {};
+      Object.keys(selected).forEach((id) => {
+        if (liveProducts[id]) liveInCart[id] = liveProducts[id];
+      });
+      const ok = await saveCart(userId, { items: selected, liveProducts: liveInCart });
       setSyncing(false);
       setSyncError(!ok);
     }, 600);
@@ -830,26 +901,33 @@ export default function StoreApp({
   // plan free que rige al agregar cualquier producto uno por uno — si no,
   // cargar una plantilla grande sería una forma de saltarse ese límite.
   function handleMergeCartTemplate(tpl: StoredCart) {
-    setLiveProducts((prev) => ({ ...prev, ...tpl.liveProducts }));
+    // El cálculo va acá afuera, no adentro del setSelected(prev => ...): React
+    // ejecuta ese updater más tarde (y en desarrollo dos veces), así que el
+    // `skipped++` de adentro todavía valía 0 cuando se lo miraba justo
+    // después, y el aviso de "no se agregaron N productos" no salía nunca.
+    const next = { ...selected };
+    let distinctCount = Object.keys(next).length;
     let skipped = 0;
-    setSelected((prev) => {
-      const next = { ...prev };
-      let distinctCount = Object.keys(next).length;
-      Object.entries(tpl.items).forEach(([id, qty]) => {
-        if (!qty || qty <= 0) return;
-        if (next[id]) {
-          next[id] += qty;
-          return;
-        }
-        if (!premium && distinctCount >= FREE_CART_PRODUCT_LIMIT) {
-          skipped++;
-          return;
-        }
-        next[id] = qty;
-        distinctCount++;
-      });
-      return next;
+    Object.entries(tpl.items).forEach(([id, qty]) => {
+      if (!qty || qty <= 0) return;
+      if (next[id]) {
+        next[id] += qty;
+        return;
+      }
+      if (!premium && distinctCount >= FREE_CART_PRODUCT_LIMIT) {
+        skipped++;
+        return;
+      }
+      next[id] = qty;
+      distinctCount++;
     });
+    // Solo entran los productos en vivo de lo que efectivamente se agregó.
+    const addedLive: Record<string, Product> = {};
+    Object.keys(next).forEach((id) => {
+      if (!selected[id] && tpl.liveProducts[id]) addedLive[id] = tpl.liveProducts[id];
+    });
+    setLiveProducts((prev) => ({ ...prev, ...addedLive }));
+    setSelected(next);
     if (skipped > 0) {
       setCartLimitNotice(
         `Llegaste al tope de ${FREE_CART_PRODUCT_LIMIT} productos del plan free: ${skipped} producto${skipped === 1 ? '' : 's'} del changuito guardado no se agregaron. Pasate a premium para un carrito sin límite.`
@@ -955,13 +1033,14 @@ export default function StoreApp({
   async function loadRubroPage(cat: string) {
     if (!coords || rubroInFlight.current) return;
     const page = rubroPages[cat] ?? 0;
-    if (page >= catalogPagesFor(cat)) return;
     rubroInFlight.current = true;
     setRubroLoadingCat(cat);
     const { lat, lng } = coords;
     const BATCH_SIZE = 6;
     try {
-      const queries = catalogQueriesFor(cat, page);
+      const lib = await loadProductsLib();
+      if (page >= lib.catalogPagesFor(cat)) return;
+      const queries = lib.catalogQueriesFor(cat, page);
       for (let i = 0; i < queries.length; i += BATCH_SIZE) {
         const batch = queries.slice(i, i + BATCH_SIZE);
         const results = await Promise.all(
@@ -989,15 +1068,30 @@ export default function StoreApp({
   // rubros y no solo de los pocos productos de la portada. Se intercalan por
   // rubro para que, con el tope de productos que se revisan, ningún rubro
   // se quede afuera.
+  //
+  // Espera a que la portada termine de cargar: antes arrancaba a la vez que
+  // las 10 búsquedas de la portada (unos 18 pedidos más compitiendo por la
+  // red y por el tope de consultas por minuto) y hacía más lenta justo la
+  // parte que la persona está mirando. `sweptFor` evita repetirlo si el
+  // efecto se vuelve a disparar por el mismo lugar.
+  const sweptFor = useRef('');
   useEffect(() => {
-    if (!coords) return;
+    if (!coords || catalogLoading) return;
+    const sweepKey = `${coords.lat},${coords.lng}`;
+    if (sweptFor.current === sweepKey) return;
+    sweptFor.current = sweepKey;
     let cancelled = false;
     const { lat, lng } = coords;
     const rubros = CATEGORIES.filter((c) => c !== 'Todos' && !CATALOG_BROWSE_DISABLED.includes(c));
-    const queries = rubros.flatMap((cat) => catalogQueriesFor(cat, 0).slice(0, DEALS_QUERIES_PER_RUBRO));
     const BATCH_SIZE = 6;
 
     (async () => {
+      const lib = await loadProductsLib();
+      if (cancelled) {
+        sweptFor.current = '';
+        return;
+      }
+      const queries = rubros.flatMap((cat) => lib.catalogQueriesFor(cat, 0).slice(0, DEALS_QUERIES_PER_RUBRO));
       const perRubro: LiveItem[][] = rubros.map(() => []);
       for (let i = 0; i < queries.length; i += BATCH_SIZE) {
         const batch = queries.slice(i, i + BATCH_SIZE);
@@ -1009,7 +1103,11 @@ export default function StoreApp({
               .catch(() => [] as LiveItem[])
           )
         );
-        if (cancelled) return;
+        if (cancelled) {
+          // Cortado a la mitad: que el próximo disparo del efecto lo rehaga.
+          sweptFor.current = '';
+          return;
+        }
         results.forEach((items, j) => {
           perRubro[rubros.indexOf(batch[j].category)].push(...items);
         });
@@ -1031,7 +1129,7 @@ export default function StoreApp({
     return () => {
       cancelled = true;
     };
-  }, [coords]);
+  }, [coords, catalogLoading]);
 
   // Productos entre los que se buscan ofertas: primero los de la portada (son
   // los que el usuario ve en el catálogo) y después el barrido de todos los rubros.
@@ -1051,7 +1149,7 @@ export default function StoreApp({
     if (loaded >= catalogPagesFor(catalogFilter)) return;
     if (loaded === 0 || rubroAll.length < rubroLimit) loadRubroPage(catalogFilter);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rubroMode, coords, catalogFilter, rubroPages, rubroLoadingCat, rubroAll.length, rubroLimit]);
+  }, [rubroMode, coords, catalogFilter, rubroPages, rubroLoadingCat, rubroAll.length, rubroLimit, productsLib]);
 
   // diccionario único id -> producto, con los productos que el usuario fue
   // agregando al carrito (todos vienen de Precios Claros, catálogo o búsqueda).
@@ -1183,7 +1281,21 @@ export default function StoreApp({
       const { updated, changed } = await refreshCartPrices(selected, liveProducts, nearbyStores, {
         force,
       });
-      if (changed) setLiveProducts(updated);
+      if (changed) {
+        // Se aplican solo los precios refrescados sobre el estado ACTUAL. Antes
+        // se reemplazaba todo liveProducts por la copia de cuando arrancó el
+        // pedido: un producto agregado al carrito mientras se refrescaba (son
+        // varios segundos) desaparecía de la comparación.
+        setLiveProducts((prev) => {
+          const merged = { ...prev };
+          Object.keys(updated).forEach((id) => {
+            if (updated[id] !== liveProducts[id] && merged[id]) {
+              merged[id] = { ...merged[id], prices: updated[id].prices, pricedAt: updated[id].pricedAt };
+            }
+          });
+          return merged;
+        });
+      }
     } finally {
       setRefreshingPrices(false);
     }
@@ -1216,7 +1328,13 @@ export default function StoreApp({
       scrollToCompare();
       return;
     }
-    const { allowed, count } = await registerCompareUse(userId, currentSignature);
+    const { allowed, count, failed } = await registerCompareUse(userId, currentSignature);
+    if (failed) {
+      // Problema de conexión, no falta de cupo: no se descuenta ni se muestra
+      // el cartel de "ya usaste tus comparaciones".
+      setCartLimitNotice('No pudimos verificar tu cuenta ahora. Revisá tu conexión y probá de nuevo.');
+      return;
+    }
     setCompareUsage(count);
     if (!allowed) {
       // El server dijo que no (llegó al tope justo ahora, o falló el pedido):
@@ -1242,6 +1360,7 @@ export default function StoreApp({
     switch (tab) {
       case 'inicio':
         setActiveCategory('Todos');
+        setCatalogFilter('todos');
         handleSearchChange('');
         window.scrollTo({ top: 0, behavior: 'smooth' });
         break;
@@ -1409,24 +1528,28 @@ export default function StoreApp({
                 sortOrder={sortOrder}
               />
             ) : (
-              <div className="empty-state">
-                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
-                  <circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" />
-                </svg>
-                <div>Sin resultados para &quot;{searchTerm}&quot; en Precios Claros.</div>
-              </div>
+              <SearchEmptyState
+                term={searchTerm || (scannedEan ? `código ${scannedEan}` : '')}
+                onClear={() => handleSearchChange('')}
+                onScan={() => setScannerOpen(true)}
+              />
             )
           ) : catalogLoading || (loadingMore && filteredCatalog.length === 0) ? (
             <ListSkeleton rows={6} />
           ) : filteredCatalog.length === 0 && !rubroMode ? (
+            searchTerm ? (
+              <SearchEmptyState
+                term={searchTerm}
+                onClear={() => handleSearchChange('')}
+                onScan={() => setScannerOpen(true)}
+              />
+            ) : (
             <div className="empty-state">
               <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
                 <circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" />
               </svg>
               <div>
-                {searchTerm ? (
-                  <>No encontramos productos para &quot;{searchTerm}&quot;.</>
-                ) : CATALOG_BROWSE_DISABLED.includes(activeCategory) ? (
+                {CATALOG_BROWSE_DISABLED.includes(activeCategory) ? (
                   // Este rubro no arma vidriera propia (ver CATALOG_BROWSE_DISABLED):
                   // se invita a buscar o escanear en vez de mostrar un catálogo
                   // que casi siempre iba a volver vacío.
@@ -1435,12 +1558,13 @@ export default function StoreApp({
                   'No pudimos traer el catálogo de Precios Claros en este momento.'
                 )}
               </div>
-              {!searchTerm && !CATALOG_BROWSE_DISABLED.includes(activeCategory) && (
+              {!CATALOG_BROWSE_DISABLED.includes(activeCategory) && (
                 <button className="cta-btn secondary" onClick={() => setCatalogRetryKey((k) => k + 1)}>
                   Reintentar
                 </button>
               )}
             </div>
+            )
           ) : rubroMode && visibleCatalog.length === 0 && (rubroFetching || rubroCanLoadMore) ? (
             // Rubro recién elegido y todavía no llegó nada: cargando, no "vacío".
             <ListSkeleton rows={6} />

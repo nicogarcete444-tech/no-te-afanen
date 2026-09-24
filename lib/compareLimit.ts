@@ -70,7 +70,12 @@ export async function getCompareUsage(userId: string | null): Promise<number> {
 // el navegador — ver register_compare_use en supabase/schema.sql para el
 // resto (evitar semanas inventadas, carreras entre dos pestañas, y el
 // dedupe de "mismo carrito, no cobrar de nuevo").
-export type CompareUseResult = { allowed: boolean; count: number };
+// `failed: true` = no se pudo hablar con el server (sin red, Supabase caído).
+// NO es lo mismo que "ya no te quedan usos": antes los dos casos se
+// devolvían como count = tope, y ante un simple corte de red la pantalla
+// decía "Ya usaste tus 3 comparaciones" y dejaba el botón trabado hasta
+// recargar, aunque la persona no hubiera gastado ninguna.
+export type CompareUseResult = { allowed: boolean; count: number; failed?: boolean };
 
 export async function registerCompareUse(
   userId: string | null,
@@ -95,11 +100,10 @@ export async function registerCompareUse(
 
   if (error || !data) {
     console.error('No se pudo registrar el uso de "Comparar ahora":', error?.message);
-    // Sin respuesta del server no hay forma honesta de decir que sí: mejor
-    // no revelar el desglose a que alguien vea gratis lo que falló en
-    // contar, y que reintente en vez de quedarse mirando un total sin poder
-    // confirmar si le costó un uso o no.
-    return { allowed: false, count: FREE_COMPARE_LIMIT };
+    // Sin respuesta del server no hay forma honesta de decir que sí: no se
+    // revela el desglose, pero tampoco se toca el contador que se muestra:
+    // el que llama avisa que fue un problema de conexión y deja reintentar.
+    return { allowed: false, count: 0, failed: true };
   }
 
   return { allowed: Boolean(data.allowed), count: Number(data.count) || 0 };

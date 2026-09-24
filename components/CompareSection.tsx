@@ -1,11 +1,10 @@
 'use client';
 
 import { useMemo, useRef, useState } from 'react';
-import { fmt } from '@/lib/products';
+import { fmt } from '@/lib/format';
 import { bestPerProduct, cartStats, ChosenEntry, estimatedStoreTotals, globalStoreIndex, potentialSavings, potentialSavingsByCategory } from '@/lib/cartStats';
 import { CartMap, Product, lowestKnownPrice } from '@/lib/types';
 import { addSaving } from '@/lib/savingsHistory';
-import { buildShareCardCanvas, shareOrDownloadCard } from '@/lib/shareCard';
 import { LiveItem } from '@/lib/liveItems';
 import { NearbyStore } from '@/lib/storePrices';
 import StoreTotalRows, { TotalRow } from './StoreTotalRows';
@@ -218,24 +217,6 @@ export default function CompareSection({
     }
   }
 
-  // Tarjeta/imagen prolija (premium): arma un PNG con Canvas y lo comparte
-  // (o descarga si el navegador no soporta compartir archivos).
-  const [cardStatus, setCardStatus] = useState<'idle' | 'busy' | 'ok' | 'error'>('idle');
-  const cardTimeout = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-
-  async function handleShareCard() {
-    if (!premium || cardStatus === 'busy') return;
-    setCardStatus('busy');
-    const bestIdx = order.find((i) => complete[i]);
-    const bestStoreLabel = bestIdx !== undefined ? stores[bestIdx] : null;
-    const bestStoreTotal = bestIdx !== undefined ? totals[bestIdx] : null;
-    const canvas = buildShareCardCanvas(chosenEntries, bestStoreLabel ?? null, bestStoreTotal ?? null, savingAmount);
-    const result = await shareOrDownloadCard(canvas);
-    setCardStatus(result === 'error' ? 'error' : 'ok');
-    if (cardTimeout.current) clearTimeout(cardTimeout.current);
-    cardTimeout.current = setTimeout(() => setCardStatus('idle'), 2600);
-  }
-
   return (
     <div className="main-compare-block" id="mainCompareBlock">
       <div className="dc-head">
@@ -295,7 +276,7 @@ export default function CompareSection({
 
       {chosenEntries.length > 0 && !revealed && (remaining ?? 0) <= 0 && (
         <div className="compare-locked">
-          <div className="compare-locked-title">Ya usaste tus 3 comparaciones de esta semana 🔒</div>
+          <div className="compare-locked-title">Ya usaste tus 3 comparaciones de esta semana</div>
           <div className="compare-locked-text">
             El plan free incluye 3 comparaciones de carrito por semana (se renuevan el lunes).
             Pasate a premium para comparar sin límite.
@@ -366,25 +347,6 @@ export default function CompareSection({
               </button>
             )}
 
-            {/* Beneficio Premium: la tarjeta (imagen) para compartir. */}
-            {premium && (
-              <button className="cta-btn secondary share-btn" onClick={handleShareCard} disabled={cardStatus === 'busy'}>
-                {cardStatus === 'busy'
-                  ? 'Armando la tarjeta…'
-                  : cardStatus === 'ok'
-                  ? '¡Lista! ✓'
-                  : cardStatus === 'error'
-                  ? 'No se pudo generar, probá de nuevo'
-                  : (
-                    <>
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                        <rect x="3" y="4" width="18" height="16" rx="2" /><circle cx="8.5" cy="9.5" r="1.5" /><path d="M21 16l-5.5-5.5L5 20" />
-                      </svg>
-                      Compartir como tarjeta
-                    </>
-                  )}
-              </button>
-            )}
           </div>
         </>
       )}

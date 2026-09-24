@@ -2,6 +2,10 @@ import { timingSafeEqual } from 'node:crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import { runPriceSnapshotBatch } from '@/lib/priceSnapshotWorker';
 
+// La tanda recorre hasta 40 productos con pedidos a Precios Claros: con el
+// límite por defecto de la función serverless se cortaba a mitad de camino.
+export const maxDuration = 60;
+
 // Comparación en tiempo constante. Un `!==` corta apenas encuentra el
 // primer byte distinto, así que el tiempo de respuesta filtra cuántos
 // caracteres del secreto acertaste y permite adivinarlo de a uno. Acá el

@@ -25,7 +25,85 @@ const SYNONYMS: Record<string, string[]> = {
   carne: ['carne picada', 'bife de chorizo', 'milanesa', 'hamburguesa', 'nalga', 'peceto'],
   embutido: ['salame', 'chorizo', 'salchicha', 'mortadela', 'jamon cocido', 'morcilla'],
   fiambre: ['jamon cocido', 'salame', 'queso de maquina', 'mortadela', 'bondiola'],
-  queso: ['queso cremoso', 'queso rallado', 'queso de maquina', 'queso untable', 'queso por salut'],
+  queso: ['queso cremoso', 'queso rallado', 'queso de maquina', 'queso untable', 'queso por salut', 'queso mozzarella', 'queso tybo', 'queso pategras'],
+  // "cheddar" no es un corte/tipo que Precios Claros cargue tal cual bajo
+  // ese nombre en la mayoría de las marcas — lo que la gente busca cuando
+  // dice "cheddar" (para la hamburguesa, sobre todo) es alguno de estos
+  // quesos de máquina/fundir. "chedar" es el error de tipeo más común
+  // (falta una d) — antes ninguno de los dos traía nada, ni con la
+  // ortografía correcta, porque no había fallback: no era que "esté mal
+  // escrito", es que esa palabra sola no existía en ningún lado de acá.
+  cheddar: ['queso cheddar', 'queso tybo', 'queso mozzarella', 'queso pategras', 'queso de maquina'],
+  chedar: ['queso cheddar', 'queso tybo', 'queso mozzarella', 'queso pategras', 'queso de maquina'],
+  // Mismo caso que "cheddar": palabras que la gente usa (en inglés, o como
+  // se dice en otro país de habla hispana) que acá no existen tal cual bajo
+  // ninguna marca — apuntan al nombre real con el que Precios Claros SÍ lo
+  // tiene cargado.
+  bacon: ['panceta'],
+  tocino: ['panceta'], // como se dice en México/España; acá es "panceta"
+  mantequilla: ['manteca'], // ídem, acá es "manteca"
+  yogurt: ['yogur bebible', 'yogur firme', 'yogur griego'], // sin la t final
+  aguacate: ['palta', 'palta hass'], // acá es "palta"
+  pickles: ['pepinillos', 'pepinillos en vinagre'],
+  palomitas: ['pochoclo'], // acá es "pochoclo"
+  papita: ['papas fritas snack'], // diminutivo típico para las papas de bolsa
+  cola: ['gaseosa cola'],
+  // Tanda grande de regionalismos (México/España/otros países) y algunas
+  // palabras en inglés — mismo criterio que arriba: cada valor de la derecha
+  // se chequeó contra queries reales que YA existen en lib/products.ts, no
+  // hay ninguno inventado.
+  hongos: ['champiñones'],
+  fresa: ['frutilla'],
+  melocoton: ['durazno'],
+  platano: ['banana'],
+  patata: ['papa'],
+  calabaza: ['zapallo'],
+  boniato: ['batata'],
+  nata: ['crema de leche', 'crema chantilly', 'crema para batir'],
+  galleta: ['galletitas'],
+  bizcocho: ['budin', 'facturas'],
+  vienesa: ['salchicha tipo viena'],
+  pancho: ['pan de pancho', 'salchicha tipo viena'],
+  cloro: ['lavandina'],
+  detergente: ['jabon en polvo', 'jabon liquido para ropa', 'detergente lavavajillas', 'liquido lavavajillas concentrado'],
+  lavaplatos: ['detergente lavavajillas', 'liquido lavavajillas concentrado'],
+  perfume: ['colonia'],
+  'cepillo de dientes': ['cepillo dental'],
+  'pasta de dientes': ['pasta dental'],
+  bateria: ['pilas'],
+  cerillos: ['fosforos'],
+  franela: ['trapo de piso'],
+  guantes: ['guantes de latex'],
+  'papel transparente': ['papel film'],
+  guisante: ['arvejas'],
+  refresco: ['gaseosa cola', 'gaseosa lima limon', 'gaseosa naranja'],
+  frijoles: ['porotos'],
+  cacahuete: ['mani'],
+  sifon: ['soda'],
+  chocolatada: ['leche chocolatada'],
+  limpiapisos: ['limpiador de pisos'],
+  cacao: ['chocolate en polvo'],
+  champan: ['champagne', 'espumante'],
+  isotonica: ['bebida isotonica'],
+  energizante: ['bebida energizante'],
+  'pan de pita': ['pan arabe'],
+  cornflakes: ['copos de maiz'],
+  pimiento: ['morron'],
+  betabel: ['remolacha'],
+  rabano: ['rabanito'],
+  bologna: ['mortadela'],
+  serrano: ['jamon crudo'],
+  'jamon dulce': ['jamon cocido'],
+  // Inglés — mismo espíritu que "bacon"/"cheddar" al principio de este
+  // objeto: alguien tipeando en inglés no tiene por qué quedarse sin nada.
+  'peanut butter': ['manteca de mani'],
+  tuna: ['atun'],
+  milk: ['leche'],
+  butter: ['manteca'],
+  cheese: ['queso cremoso', 'queso rallado', 'queso de maquina', 'queso untable', 'queso mozzarella', 'queso tybo', 'queso pategras'],
+  chicken: ['pollo'],
+  eggs: ['huevos'],
+  bread: ['pan'],
   golosina: ['caramelos', 'chicles', 'alfajor', 'chocolate', 'chupetines', 'gomitas', 'turron'],
   desayuno: ['cafe', 'te en saquitos', 'leche', 'galletitas', 'cereales', 'mermelada', 'dulce de leche'],
   merienda: ['galletitas', 'alfajor', 'leche chocolatada', 'mate cocido', 'budin', 'facturas'],

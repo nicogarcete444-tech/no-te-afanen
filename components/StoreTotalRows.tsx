@@ -1,4 +1,4 @@
-import { fmt } from '@/lib/products';
+import { fmt } from '@/lib/format';
 import StoreLogo, { chainLabel, getStoreLogo } from './StoreLogo';
 
 export type TotalRow = {

@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { CATEGORY_COLORS, fmt } from '@/lib/products';
+import { CATEGORY_COLORS } from '@/lib/categories';
+import { fmt } from '@/lib/format';
 import {
   CategorySaving,
   currentMonthKey,
@@ -258,7 +259,7 @@ export default function SavingsHistoryModal({
                   <div>
                     <div className="savings-amount">{fmt(thisMonthTotal)}</div>
                     <div className="savings-detail">
-                      sumando lo que ahorraste en cada lista de compras que confirmaste este mes
+                      sumando lo que agregaste a tus ahorros este mes
                     </div>
                   </div>
                 </div>
@@ -317,8 +318,8 @@ export default function SavingsHistoryModal({
 
               {totalAcumulado === 0 ? (
                 <div className="cart-sheet-empty">
-                  Todavía no registramos ahorros. Cuando confirmes una lista de compras desde
-                  &quot;Comparación por súper&quot;, el ahorro de esa compra se suma acá.
+                  Todavía no registramos ahorros. Cuando toques &quot;Agregar a mis ahorros&quot; en
+                  &quot;Dónde conviene hoy&quot;, el ahorro de esa compra se suma acá.
                 </div>
               ) : (
                 <>

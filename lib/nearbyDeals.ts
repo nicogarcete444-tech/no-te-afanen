@@ -6,7 +6,7 @@
 // `fetchStorePriceDetails` que ya se muestra en la ficha de cada producto,
 // solo que acá lo recorremos en tanda para armar un feed.
 import { extractEan, LiveItem } from './liveItems';
-import { fetchStorePriceDetails, NearbyStore } from './storePrices';
+import { fetchStorePriceDetails, LIST_PRICE_MAX_AGE_MS, NearbyStore } from './storePrices';
 
 export type NearbyDeal = {
   id: string;
@@ -69,7 +69,7 @@ export async function findNearbyDeals(
   }
 
   const results = await mapWithConcurrency(candidates, concurrency, async ({ item, ean }) => {
-    const details = await fetchStorePriceDetails(ean, stores);
+    const details = await fetchStorePriceDetails(ean, stores, { maxAgeMs: LIST_PRICE_MAX_AGE_MS });
     if (!details) return null;
 
     // De las cadenas cercanas que tienen este producto, la promo más

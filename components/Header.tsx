@@ -3,8 +3,13 @@
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { fmt } from '@/lib/products';
-import { getNotifications, markNotificationsRead, PriceDropNotification } from '@/lib/priceAlerts';
+import { fmt } from '@/lib/format';
+import {
+  getNotifications,
+  getUnreadNotificationCount,
+  markNotificationsRead,
+  PriceDropNotification,
+} from '@/lib/priceAlerts';
 import SearchBox from './SearchBox';
 import {
   getPushPermissionState,
@@ -62,6 +67,11 @@ export default function Header({
   // parpadear en el render del servidor.
   const [guestBellSeen, setGuestBellSeen] = useState(true);
   const [notifications, setNotifications] = useState<PriceDropNotification[]>([]);
+  // Se sabe cuántos hay sin leer (para el puntito) sin traer la lista entera
+  // hasta que la persona realmente abre el panel — ver notas más abajo.
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [notifLoaded, setNotifLoaded] = useState(false);
+  const [notifLoading, setNotifLoading] = useState(false);
   const notifRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
 
@@ -106,21 +116,25 @@ export default function Header({
     setPushBusy(false);
   }
 
+  // Al montar (o cambiar de usuario) solo se pide el NÚMERO de avisos sin
+  // leer, no la lista completa: es lo único que hace falta para la
+  // campanita, y así cada carga de página no baja las 20 filas de
+  // price_drop_notifications de gente que ni siquiera va a abrir el panel.
   useEffect(() => {
+    setNotifications([]);
+    setNotifLoaded(false);
     if (!userId) {
-      setNotifications([]);
+      setUnreadCount(0);
       return;
     }
     let cancelled = false;
-    getNotifications(userId).then((res) => {
-      if (!cancelled) setNotifications(res);
+    getUnreadNotificationCount(userId).then((count) => {
+      if (!cancelled) setUnreadCount(count);
     });
     return () => {
       cancelled = true;
     };
   }, [userId]);
-
-  const unreadCount = notifications.filter((n) => !n.read).length;
 
   useEffect(() => {
     if (userId) return;
@@ -142,8 +156,25 @@ export default function Header({
         // sin storage: el puntito vuelve en la próxima visita, no pasa nada
       }
     }
-    if (userId && unreadCount > 0) {
+    if (!userId) return;
+    // La lista completa (con nombre, precios, etc.) recién se pide acá, al
+    // abrir el panel de verdad — no en cada carga de página.
+    const hadUnread = unreadCount > 0;
+    if (!notifLoaded) {
+      setNotifLoaded(true);
+      setNotifLoading(true);
+      // Se pide con las 20 filas ya marcadas "leídas" en el estado local sin
+      // esperar la vuelta de markNotificationsRead: no importa en qué orden
+      // terminen las dos consultas, el panel siempre se ve como recién visto.
+      getNotifications(userId).then((res) => {
+        setNotifications(hadUnread ? res.map((n) => ({ ...n, read: true })) : res);
+        setNotifLoading(false);
+      });
+    } else if (hadUnread) {
       setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+    }
+    if (hadUnread) {
+      setUnreadCount(0);
       markNotificationsRead(userId);
     }
   }
@@ -274,7 +305,9 @@ export default function Header({
                       )}
                     </button>
                   )}
-                  {notifications.length === 0 ? (
+                  {notifLoading ? (
+                    <div className="notif-empty">Cargando avisos…</div>
+                  ) : notifications.length === 0 ? (
                     <div className="notif-empty">
                       Todavía no hay avisos. Tocá "Seguir" en un producto para que te avisemos si sube o baja de precio.
                     </div>

@@ -108,11 +108,21 @@ const GUEST_SAVINGS_MIGRATED_KEY = 'noteafanen_guest_savings_migrated';
 // vuelve a llamar en otra sesión desde el mismo navegador).
 export async function migrateGuestSavingsToAccount(userId: string): Promise<void> {
   if (typeof window === 'undefined') return;
-  if (window.localStorage.getItem(GUEST_SAVINGS_MIGRATED_KEY) === userId) return;
+  // Storage bloqueado (modo privado de algunos navegadores): getItem/setItem
+  // tiran excepción y, sin este try, la promesa rechazada quedaba sin manejar.
+  try {
+    if (window.localStorage.getItem(GUEST_SAVINGS_MIGRATED_KEY) === userId) return;
+  } catch {
+    return;
+  }
 
   const entries = loadGuestEntries();
   if (entries.length === 0) {
-    window.localStorage.setItem(GUEST_SAVINGS_MIGRATED_KEY, userId);
+    try {
+      window.localStorage.setItem(GUEST_SAVINGS_MIGRATED_KEY, userId);
+    } catch {
+      // nada que hacer
+    }
     return;
   }
 
@@ -127,7 +137,11 @@ export async function migrateGuestSavingsToAccount(userId: string): Promise<void
   );
 
   if (!error) {
-    window.localStorage.setItem(GUEST_SAVINGS_MIGRATED_KEY, userId);
+    try {
+      window.localStorage.setItem(GUEST_SAVINGS_MIGRATED_KEY, userId);
+    } catch {
+      // nada que hacer
+    }
     saveGuestEntries([]);
   } else {
     console.error('No se pudo migrar el ahorro de invitado a la cuenta:', error.message);

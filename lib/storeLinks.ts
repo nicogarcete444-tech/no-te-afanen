@@ -5,6 +5,8 @@
 // plataforma (VTEX) que Disco, así que se arma igual. Para Día y ChangoMas
 // no pudimos confirmar un patrón de búsqueda estable, así que en vez de
 // arriesgarnos a un link de resultados roto, mandamos a la home del súper.
+import { isCarrefour, isChangomas, isCoto, isDia, isDisco, isFarmacity, isJumbo } from './chains';
+
 function slugify(text: string): string {
   return text
     .toLowerCase()
@@ -15,29 +17,28 @@ function slugify(text: string): string {
 }
 
 export function getStoreBuyUrl(chain: string, productName: string): string | null {
-  const n = chain.toLowerCase();
   const q = encodeURIComponent(productName);
   const slug = slugify(productName) || 'busqueda';
 
-  if (n.includes('carrefour')) {
+  if (isCarrefour(chain)) {
     return `https://supermercado.carrefour.com.ar/catalogsearch/result/?q=${q}`;
   }
-  if (n.includes('coto')) {
+  if (isCoto(chain)) {
     return `https://www.cotodigital.com.ar/sitios/cdigi/productos/${slug}`;
   }
-  if (n.includes('disco')) {
+  if (isDisco(chain)) {
     return `https://www.disco.com.ar/${slug}?_q=${q}&map=ft`;
   }
-  if (n.includes('jumbo')) {
+  if (isJumbo(chain)) {
     return `https://www.jumbo.com.ar/${slug}?_q=${q}&map=ft`;
   }
-  if (n.includes('changomas') || n.includes('chango mas')) {
+  if (isChangomas(chain)) {
     return 'https://www.masonline.com.ar/';
   }
-  if (n.includes('dia') || n.includes('día')) {
+  if (isDia(chain)) {
     return 'https://diaonline.supermercadosdia.com.ar/';
   }
-  if (n.includes('farmacity')) {
+  if (isFarmacity(chain)) {
     return 'https://www.farmacity.com/';
   }
   return null;

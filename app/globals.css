@@ -509,6 +509,10 @@
     text-align:center;padding:40px 16px;color:var(--ink-soft);font-size:13.5px;
   }
   .empty-state svg{margin-bottom:10px;color:var(--ink-faint);}
+  .empty-state-hint{
+    max-width:340px;margin:8px auto 0;font-size:12px;color:var(--ink-faint);line-height:1.4;
+  }
+  .empty-state-actions{display:flex;gap:8px;justify-content:center;margin-top:16px;flex-wrap:wrap;}
 
   /* ---- Esqueletos de carga ----
      Antes eran dos barras grises sueltas con un latido de opacidad: no se
@@ -828,14 +832,6 @@
   }
   .compare-locked-title{font-size:15px;font-weight:800;color:var(--ink);margin-bottom:8px;}
   .compare-locked-text{font-size:12.5px;color:var(--ink-soft);line-height:1.5;max-width:420px;margin:0 auto 16px;}
-  .share-row{margin-top:12px;display:flex;flex-direction:column;gap:10px;}
-  .share-btn{display:flex;align-items:center;justify-content:center;gap:8px;}
-  .share-premium-hint{
-    display:flex;align-items:flex-start;gap:8px;text-align:left;
-    font-size:12px;color:var(--ink-soft);background:var(--chip-bg);border-radius:12px;
-    padding:12px 14px;line-height:1.5;
-  }
-  .share-premium-hint svg{flex-shrink:0;margin-top:2px;}
 
 /* --- auth --- */
 .auth-wrap{

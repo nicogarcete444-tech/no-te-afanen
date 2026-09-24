@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { CATEGORY_COLORS, fmt } from '@/lib/products';
+import { CATEGORY_COLORS } from '@/lib/categories';
+import { fmt } from '@/lib/format';
 import { cartStats, potentialSavings } from '@/lib/cartStats';
 import { CartMap, Product, lowestKnownPrice } from '@/lib/types';
 import { eanFromCartId, getProductImageUrl, getProductImageUrlByName } from '@/lib/productImage';

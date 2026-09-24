@@ -67,10 +67,12 @@ export async function getProductNameFromPreciosClaros(
 // quedaba en 2 súpers (o menos) aunque hubiera más cadenas grandes cerca.
 // No inventamos precios para completar — así que la única forma de que la
 // comparación muestre más súpers reales es chequear más candidatas desde
-// el arranque. Como CADENAS_PRIORITARIAS de abajo ya prioriza a las cadenas
+// el arranque. Como prioridadDeCadena de abajo ya prioriza a las cadenas
 // nacionales (Carrefour, Coto, Jumbo, Disco, Día, ChangoMas), 6 alcanza
 // para cubrirlas casi siempre a todas antes de completar con una cadena
 // regional.
+import { isMajorChain } from './chains';
+
 const MAX_CHAINS = 6;
 
 // Precios Claros no es solo para supermercados: por la Ley de Góndolas
@@ -91,11 +93,10 @@ const CADENAS_NO_SUPER = [
 // autoservicios chicos o cadenas regionales, esos 8 lugares se llenaban
 // antes de llegar a un Carrefour o un Jumbo que estaba un poco más lejos
 // pero seguía siendo una opción real para comparar.
-const CADENAS_PRIORITARIAS = ['carrefour', 'coto', 'jumbo', 'disco', 'dia', 'día', 'changomas', 'chango mas'];
-
+// (ver lib/chains.ts: "Diarco" no es "Día", y con un includes('dia') se colaba
+// como cadena nacional prioritaria).
 function prioridadDeCadena(chain: string): number {
-  const nombre = chain.toLowerCase();
-  return CADENAS_PRIORITARIAS.some((p) => nombre.includes(p)) ? 0 : 1;
+  return isMajorChain(chain) ? 0 : 1;
 }
 
 function esCadenaDeSuper(chain: string): boolean {
@@ -154,7 +155,7 @@ export type StorePriceDetail = {
 //     abajo: si la red falla, mejor un precio con antigüedad conocida que
 //     ningún precio.
 class TtlCache<T> {
-  private store = new Map<string, { value: T; expiresAt: number }>();
+  private store = new Map<string, { value: T; expiresAt: number; savedAt: number }>();
 
   get(key: string): T | undefined {
     const hit = this.store.get(key);
@@ -167,8 +168,16 @@ class TtlCache<T> {
     return this.store.get(key)?.value;
   }
 
+  // Devuelve el valor solo si se guardó hace menos de `maxAgeMs`. Distinto de
+  // get(): acá quien pide decide cuánta antigüedad tolera.
+  getYoungerThan(key: string, maxAgeMs: number): { value: T } | undefined {
+    const hit = this.store.get(key);
+    if (!hit || Date.now() - hit.savedAt > maxAgeMs) return undefined;
+    return { value: hit.value };
+  }
+
   set(key: string, value: T, ttlMs: number) {
-    this.store.set(key, { value, expiresAt: Date.now() + ttlMs });
+    this.store.set(key, { value, expiresAt: Date.now() + ttlMs, savedAt: Date.now() });
   }
 }
 
@@ -189,13 +198,30 @@ const detailInFlight = new Map<string, Promise<Record<string, StorePriceDetail> 
 // (cache-first con TTL: si había algo guardado de los últimos 30 minutos,
 // ni se llegaba a preguntarle a la red), lo cual podía mostrar un precio
 // desactualizado aunque hubiera señal de sobra para traer el de ahora.
+//
+// `maxAgeMs` (opcional, 0 por defecto = siempre red): las pantallas que piden
+// MUCHOS productos a la vez (tarjetas del catálogo, feed de ofertas,
+// comparación general) pasan unos minutos acá. Sin eso, cada tarjeta que
+// entraba en pantalla y cada vez que crecía el catálogo se repetía TODO el
+// barrido contra /api/producto — que además corta a las 120 consultas por
+// minuto: el resultado eran tarjetas sin precio y ofertas que desaparecían
+// sin que el usuario hiciera nada raro. No pierde frescura real: el server ya
+// cachea la respuesta de Precios Claros 6 horas. Ficha, agregar al carrito y
+// "Actualizar" siguen yendo siempre a la red.
+export const LIST_PRICE_MAX_AGE_MS = 5 * 60 * 1000;
+
 export async function fetchStorePriceDetails(
   ean: string,
-  stores: NearbyStore[]
+  stores: NearbyStore[],
+  { maxAgeMs = 0 }: { maxAgeMs?: number } = {}
 ): Promise<Record<string, StorePriceDetail> | null> {
   if (!ean || !stores.length) return null;
 
   const cacheKey = ean + '|' + stores.map((s) => s.sucursalId).join(',');
+  if (maxAgeMs > 0) {
+    const recent = detailCache.getYoungerThan(cacheKey, maxAgeMs);
+    if (recent && recent.value) return recent.value;
+  }
   if (detailInFlight.has(cacheKey)) return detailInFlight.get(cacheKey)!;
 
   const promise = (async () => {
@@ -227,7 +253,12 @@ export async function fetchStorePriceDetails(
         ].filter((n): n is number => typeof n === 'number');
         const mejorPromo = promoCandidatos.length ? Math.min(...promoCandidatos) : undefined;
 
-        const precio = mejorPromo ?? precioLista;
+        // El más bajo entre promo y lista: una promo por cantidad puede figurar
+        // MÁS cara que la lista, y ese no es el precio al que se compra uno.
+        const precio =
+          mejorPromo !== undefined && precioLista !== undefined
+            ? Math.min(mejorPromo, precioLista)
+            : mejorPromo ?? precioLista;
         if (typeof precio !== 'number') continue;
 
         const detail: StorePriceDetail = { precio };

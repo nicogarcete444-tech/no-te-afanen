@@ -18,7 +18,12 @@ export async function GET(request: Request) {
   // login/page.tsx puede mandar a dónde volver después (hoy siempre "/",
   // pero queda abierto por si en el futuro se confirma desde un link a un
   // producto puntual, etc.).
-  const next = searchParams.get('next') ?? '/';
+  //
+  // Solo se aceptan rutas internas. `${origin}${next}` con next="@evil.com"
+  // armaba "https://tusitio.com@evil.com", que el navegador interpreta como
+  // el host evil.com (open redirect, útil para phishing después del login).
+  const rawNext = searchParams.get('next') ?? '/';
+  const next = rawNext.startsWith('/') && !rawNext.startsWith('//') && !rawNext.startsWith('/\\') ? rawNext : '/';
 
   if (code) {
     const supabase = await createClient();

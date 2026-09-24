@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { CATEGORIES } from '@/lib/products';
+import { CATEGORIES } from '@/lib/categories';
 import { NearbyStore } from '@/lib/storePrices';
 import { CartMap, Product } from '@/lib/types';
 import {
@@ -86,6 +86,12 @@ export default function CategoryProductList({
       }
     }
     const next = await toggleWatch(userId, ean, displayName, currently);
+    if (!currently && !next) {
+      // No se pudo activar (sin red, tope de la base, etc.): antes caía en el
+      // mensaje de "Dejaste de seguir", que era mentira.
+      setNotice({ text: 'No pudimos activar el aviso ahora. Probá de nuevo en un momento.' });
+      return;
+    }
     setWatched((prev) => {
       const copy = new Set(prev);
       if (next) copy.add(ean);
@@ -129,7 +135,10 @@ export default function CategoryProductList({
         category,
         prices: priceByStore,
         ean,
-        pricedAt: Date.now(),
+        // Sin ningún precio no hay "foto de precios" que marcar como fresca:
+        // con pricedAt puesto, el producto quedaba 6 horas sin refrescarse y
+        // sin aportar nada a la comparación.
+        pricedAt: Object.keys(priceByStore).length ? Date.now() : undefined,
         icon: '',
       });
     } finally {
@@ -158,7 +167,7 @@ export default function CategoryProductList({
       category: openProduct.category,
       prices: priceByStore,
       ean: openProduct.ean,
-      pricedAt: Date.now(),
+      pricedAt: Object.keys(priceByStore).length ? Date.now() : undefined,
       icon: '',
     });
     setOpenProduct(null);

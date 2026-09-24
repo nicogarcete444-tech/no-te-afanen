@@ -20,7 +20,6 @@ const ROWS: { label: string; free: string; premium: string }[] = [
   { label: 'Productos en el carrito', free: `Hasta ${FREE_CART_PRODUCT_LIMIT}`, premium: 'Sin límite' },
   { label: 'Comparaciones por semana', free: `${FREE_COMPARE_LIMIT} por semana`, premium: 'Sin límite' },
   { label: 'Alertas de bajada de precio', free: `Hasta ${FREE_ALERT_LIMIT}`, premium: 'Sin límite' },
-  { label: 'Tarjeta prolija para compartir (imagen)', free: '—', premium: 'Sí' },
 ];
 
 function fmtFecha(d: Date): string {

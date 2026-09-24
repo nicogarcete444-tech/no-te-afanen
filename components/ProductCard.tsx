@@ -1,10 +1,10 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { fmt } from '@/lib/products';
+import { fmt } from '@/lib/format';
 import { getProductImageUrl } from '@/lib/productImage';
 import { getInitials, getMonogramIndex } from '@/lib/monogram';
-import { fetchStorePriceDetails, NearbyStore, StorePriceDetail } from '@/lib/storePrices';
+import { fetchStorePriceDetails, LIST_PRICE_MAX_AGE_MS, NearbyStore, StorePriceDetail } from '@/lib/storePrices';
 import StoreLogo, { chainLabel, getStoreLogo } from './StoreLogo';
 
 // La tarjeta de producto del catálogo.
@@ -120,7 +120,7 @@ function useCardPrices(ean: string | null, stores: NearbyStore[], ref: React.Ref
     if (!visible || !ean || !stores.length) return;
     let cancelled = false;
     setState((s) => ({ ...s, status: 'loading' }));
-    limited(() => fetchStorePriceDetails(ean, stores), () => cancelled).then((details) => {
+    limited(() => fetchStorePriceDetails(ean, stores, { maxAgeMs: LIST_PRICE_MAX_AGE_MS }), () => cancelled).then((details) => {
       if (!cancelled) setState({ status: 'done', details });
     });
     return () => {
