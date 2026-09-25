@@ -833,31 +833,86 @@
   .compare-locked-title{font-size:15px;font-weight:800;color:var(--ink);margin-bottom:8px;}
   .compare-locked-text{font-size:12.5px;color:var(--ink-soft);line-height:1.5;max-width:420px;margin:0 auto 16px;}
 
-/* --- auth --- */
+/* --- auth ---
+   Referencia: pantallas de login/alta de apps grandes locales (Ualá,
+   Mercado Libre, Mercado Pago) — identidad de marca visible arriba,
+   tarjeta con superficie propia (no el formulario flotando directo sobre
+   el fondo), íconos en los campos para escanear rápido, medidor de
+   contraseña en barras además de texto, y el link de "olvidé mi
+   contraseña" que a cualquier cuenta seria le falta. Todo dentro de la
+   misma paleta de un solo acento que ya usa el resto del sitio: nada de
+   esto suma color nuevo. */
 .auth-wrap{
-  min-height:100dvh;display:flex;align-items:center;justify-content:center;padding:24px;
+  min-height:100dvh;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  padding:24px;gap:28px;
 }
-.auth-card{width:100%;max-width:360px;}
+.auth-brand{display:flex;align-items:center;gap:9px;}
+.auth-brand-icon{
+  display:flex;align-items:center;justify-content:center;flex-shrink:0;
+  width:40px;height:40px;border-radius:12px;background:var(--accent-wash);
+}
+.auth-brand-name{
+  font-family:var(--font-archivo),sans-serif;font-weight:800;font-size:17px;letter-spacing:-0.035em;color:var(--ink);
+}
+.auth-card{width:100%;max-width:380px;padding:28px;border-radius:var(--r-lg);}
+/* En mobile la tarjeta se funde con el fondo (menos looking-boxed, más
+   pantalla completa); recién de tablet para arriba se despega como
+   superficie propia con sombra, que es lo que evita que en desktop el
+   formulario quede flotando solo en medio de una página vacía. */
+@media (min-width:560px){
+  .auth-card{background:var(--surface);border:1px solid var(--line);box-shadow:var(--shadow-md);}
+}
 .auth-back{
   display:flex;align-items:center;gap:6px;background:none;border:none;cursor:pointer;
-  color:var(--ink-soft);font-size:13.5px;font-weight:600;padding:0;margin-bottom:22px;
+  color:var(--ink-soft);font-size:13.5px;font-weight:600;padding:0;margin-bottom:20px;
   font-family:var(--font-inter),sans-serif;transition:color .15s ease;
 }
 .auth-back:hover{color:var(--ink);}
 .auth-back svg{flex-shrink:0;}
-.auth-title{font-size:22px;margin-bottom:6px;}
-.auth-sub{font-size:13.5px;color:var(--ink-soft);margin-bottom:28px;}
+.auth-title{font-size:23px;margin-bottom:6px;}
+.auth-sub{font-size:13.5px;color:var(--ink-soft);line-height:1.5;margin-bottom:26px;}
 .auth-field{margin-bottom:14px;}
 .auth-field label{display:block;font-size:12px;font-weight:600;color:var(--ink-soft);margin-bottom:6px;}
+.auth-field-label-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;}
+.auth-field-label-row label{margin-bottom:0;}
+.auth-forgot-link{
+  background:none;border:none;padding:0;cursor:pointer;color:var(--purple-2);
+  font-size:12px;font-weight:700;font-family:var(--font-inter),sans-serif;
+}
+.auth-forgot-link:hover{text-decoration:underline;}
+.auth-input-wrap{position:relative;}
+.auth-input-icon{
+  position:absolute;left:14px;top:50%;transform:translateY(-50%);color:var(--ink-faint);
+  pointer-events:none;transition:color .15s ease;
+}
 .auth-field input{
-  width:100%;border:1px solid var(--line);border-radius:10px;padding:12px 14px;
+  width:100%;border:1px solid var(--line);border-radius:10px;padding:12px 14px 12px 40px;
   font-size:14.5px;color:var(--ink);background:var(--surface);font-family:var(--font-inter),sans-serif;outline:none;
   transition:border-color .15s ease;
 }
 .auth-field input:focus{border-color:var(--purple-2);}
-.auth-error{font-size:12.5px;color:var(--up);margin:-4px 0 14px;}
+.auth-input-wrap:focus-within .auth-input-icon{color:var(--purple-2);}
+.auth-error{
+  display:flex;align-items:flex-start;gap:7px;font-size:12.5px;font-weight:600;color:var(--up);
+  background:color-mix(in srgb, var(--up) 10%, var(--surface));border-radius:10px;padding:10px 12px;margin:-2px 0 14px;
+  line-height:1.4;
+}
+.auth-error svg{flex-shrink:0;margin-top:1px;}
 .auth-switch{font-size:13px;color:var(--ink-soft);margin-top:18px;text-align:center;}
 .auth-switch button{background:none;border:none;color:var(--purple-2);font-weight:700;cursor:pointer;padding:0;font-size:13px;}
+.auth-legal{font-size:11.5px;color:var(--ink-faint);line-height:1.5;text-align:center;margin-top:14px;}
+.auth-legal a{color:var(--ink-soft);font-weight:600;text-decoration:underline;text-underline-offset:2px;}
+.auth-legal a:hover{color:var(--ink);}
+
+/* spinner del botón de submit mientras carga, en vez de dejar solo el
+   cambio de texto — la rueda da la misma señal de "está pasando algo" que
+   usan el resto de las apps con este mismo patrón de botón lleno. */
+.cta-spinner{
+  display:inline-block;width:14px;height:14px;border-radius:50%;
+  border:2px solid color-mix(in srgb, var(--bg) 35%, transparent);border-top-color:var(--bg);
+  vertical-align:-2.5px;margin-right:8px;animation:cta-spin .7s linear infinite;
+}
+@keyframes cta-spin{to{transform:rotate(360deg);}}
 
 /* --- pantalla "revisá tu mail" tras registrarte --- */
 .auth-check-email{
@@ -887,9 +942,16 @@
 .auth-password-toggle:hover{background:var(--chip-bg);color:var(--ink);}
 
 /* medidor + checklist de seguridad de contraseña */
-.pw-strength{display:flex;justify-content:space-between;align-items:center;margin:8px 0 12px;}
+.pw-strength{display:flex;justify-content:space-between;align-items:center;gap:10px;margin:8px 0 12px;}
 .pw-strength-label{font-size:12px;color:var(--ink-soft);}
-.pw-strength-value{font-size:12.5px;font-weight:700;}
+.pw-strength-value{font-size:12.5px;font-weight:700;flex-shrink:0;}
+/* Barra segmentada además del texto: de un vistazo, sin tener que leer la
+   palabra ("Débil"/"Buena"/etc.) para saber si falta completar algo. Es el
+   patrón que usan apps de bancos/fintech para esto. */
+.pw-strength-bars{display:flex;gap:4px;flex:1;}
+.pw-strength-bar{
+  height:4px;flex:1;border-radius:2px;background:var(--line);transition:background .2s ease;
+}
 .pw-checklist{display:flex;flex-direction:column;gap:8px;margin-bottom:18px;}
 .pw-check-item{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--ink-faint);transition:color .15s ease;}
 .pw-check-item.met{color:var(--ink);}
@@ -921,51 +983,68 @@
 
 .account-panel{
   position:absolute;top:calc(100% + 10px);right:0;z-index:71;
-  background:var(--surface);border:1px solid var(--line);
-  border-radius:var(--r-lg);padding:8px;min-width:270px;
+  /* Gris, no blanco: cada grupo de abajo (account-card) es su propia
+     tarjeta blanca que "flota" sobre este fondo, en vez de que todo el
+     panel sea una sola superficie y las filas se separen a puro texto
+     en negrita. Mismo recurso que "Tu perfil" en Mercado Pago o
+     Instagram. */
+  background:var(--surface-2);border:1px solid var(--line);
+  border-radius:var(--r-lg);padding:10px;min-width:280px;
   box-shadow:var(--shadow-md);
   animation:fadeUp .16s ease both;
 }
 .account-panel-grip{display:none;}
 
 .account-head{
-  display:flex;align-items:center;gap:12px;padding:10px 10px 14px;
-  border-bottom:1px solid var(--line);margin-bottom:6px;
+  display:flex;align-items:center;gap:12px;padding:6px 6px 16px;
 }
+.account-head-button{
+  width:100%;background:none;border:none;cursor:pointer;text-align:left;
+  border-radius:var(--r-sm);transition:background .12s ease;
+  font-family:var(--font-inter),sans-serif;
+}
+.account-head-button:hover{background:var(--surface);}
+.account-head-caret{
+  flex-shrink:0;color:var(--ink-faint);transition:transform .15s ease;
+}
+.account-head-caret.is-open{transform:rotate(180deg);}
 .account-avatar{
-  width:38px;height:38px;border-radius:50%;flex-shrink:0;
+  width:46px;height:46px;border-radius:50%;flex-shrink:0;
   display:flex;align-items:center;justify-content:center;
   background:var(--ink);color:var(--bg);
-  font-family:var(--font-archivo),sans-serif;font-weight:800;font-size:16px;
+  font-family:var(--font-archivo),sans-serif;font-weight:800;font-size:18px;
 }
 .account-head-text{min-width:0;}
 .account-head-title{
-  font-size:13.5px;font-weight:700;color:var(--ink);
+  font-size:14px;font-weight:700;color:var(--ink);
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
 }
-.account-head-sub{font-size:11.5px;color:var(--ink-soft);margin-top:2px;}
+.account-head-sub{font-size:12px;color:var(--ink-soft);margin-top:2px;}
 
-.account-rows{display:flex;flex-direction:column;gap:2px;}
+/* Una tarjeta blanca por grupo (tema / cuenta+premium+ahorros / admin),
+   con margen entre tarjetas en vez de líneas divisorias adentro de una
+   lista única. */
+.account-card{
+  background:var(--surface);border-radius:var(--r-sm);
+  margin-bottom:8px;overflow:hidden;
+}
+.account-rows{display:flex;flex-direction:column;}
 .account-row{
   display:flex;align-items:center;gap:12px;width:100%;
-  background:none;border:none;border-radius:var(--r-sm);
-  padding:12px 10px;cursor:pointer;text-align:left;text-decoration:none;
-  font-family:var(--font-inter),sans-serif;font-size:14px;font-weight:600;color:var(--ink);
+  background:none;border:none;
+  padding:12px 12px;cursor:pointer;text-align:left;text-decoration:none;
+  font-family:var(--font-inter),sans-serif;font-size:14px;font-weight:500;color:var(--ink);
   transition:background .12s ease;
+  border-bottom:1px solid var(--line);
 }
+.account-card > .account-row:last-child,
+.account-card > .account-row-switch:last-child{border-bottom:none;}
 .account-row span{flex:1;min-width:0;}
 .account-row svg{flex-shrink:0;color:var(--ink-soft);}
 .account-row-chevron{color:var(--ink-faint) !important;}
 .account-row:hover{background:var(--surface-2);}
 .account-row-accent{color:var(--accent);}
 .account-row-accent svg{color:var(--accent);}
-.account-row-danger{color:var(--up);}
-.account-row-danger svg{color:var(--up);}
-
-.account-section-label{
-  font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;
-  color:var(--ink-faint);padding:10px 10px 4px;
-}
 
 .account-row-switch{cursor:default;}
 .account-row-switch:hover{background:none;}
@@ -981,6 +1060,26 @@
   transition:transform .15s ease;
 }
 .theme-switch.is-on .theme-switch-knob{transform:translateX(16px);}
+
+/* "Cerrar sesión" es reversible; "Eliminar cuenta" no. Antes las dos eran
+   filas idénticas en rojo dentro de la lista, con el mismo peso que "Mis
+   ahorros" — acá quedan afuera de las tarjetas, sin ícono, y solo la de
+   borrar la cuenta usa el color de alerta y letra más chica, como una
+   salida de emergencia y no como una opción más del menú. */
+.account-danger-zone{
+  display:flex;flex-direction:column;align-items:center;
+  padding:10px 0 4px;
+}
+.account-plain-action{
+  background:none;border:none;cursor:pointer;
+  font-family:var(--font-inter),sans-serif;font-size:13.5px;font-weight:500;
+  color:var(--ink-soft);padding:8px 10px;
+}
+.account-plain-action:hover{color:var(--ink);}
+.account-plain-action-danger{
+  font-size:12.5px;color:var(--up);
+}
+.account-plain-action-danger:hover{color:var(--up);opacity:.8;}
 
 .account-premium-badge{
   display:flex;align-items:center;gap:8px;padding:12px 10px;border-radius:var(--r-sm);
