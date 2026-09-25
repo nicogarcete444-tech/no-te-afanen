@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { fmt } from '@/lib/format';
-import { getProductImageUrl } from '@/lib/productImage';
+import { useProductPhoto } from '@/lib/productImage';
 import { getInitials, getMonogramIndex } from '@/lib/monogram';
 import { fetchStorePriceDetails, LIST_PRICE_MAX_AGE_MS, NearbyStore, StorePriceDetail } from '@/lib/storePrices';
 import StoreLogo, { chainLabel, getStoreLogo } from './StoreLogo';
@@ -18,40 +18,21 @@ import StoreLogo, { chainLabel, getStoreLogo } from './StoreLogo';
 // nunca se pide dos veces.
 
 function CardMedia({ ean, nombre, initialsFrom }: { ean: string | null; nombre: string; initialsFrom: string }) {
-  const [url, setUrl] = useState<string | null>(null);
-  // "buscando" arranca en true solo si hay un código con el que buscar: sin
-  // esto el hueco mostraba el respaldo desde el primer frame y parecía que el
-  // producto no tenía foto, cuando todavía no había llegado.
-  const [buscando, setBuscando] = useState(!!ean);
-
-  useEffect(() => {
-    let cancelled = false;
-    if (!ean) {
-      setBuscando(false);
-      return;
-    }
-    setBuscando(true);
-    getProductImageUrl(ean, nombre).then((found) => {
-      if (cancelled) return;
-      setUrl(found);
-      setBuscando(false);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [ean, nombre]);
+  // useProductPhoto ya prueba la fuente siguiente sola si la imagen rompe
+  // (onImageError), sin volver a pedirle nada al server.
+  const { url, loading, onImageError } = useProductPhoto(ean, nombre);
 
   if (url) {
     return (
       <div className="pcard-media has-photo">
-        <img src={url} alt="" width={60} height={60} loading="lazy" decoding="async" onError={() => setUrl(null)} />
+        <img src={url} alt="" width={60} height={60} loading="lazy" decoding="async" onError={onImageError} />
       </div>
     );
   }
 
   return (
-    <div className={`pcard-media${buscando ? ' loading' : ' no-photo'}`}>
-      {!buscando && (
+    <div className={`pcard-media${loading ? ' loading' : ' no-photo'}`}>
+      {!loading && (
         <div className="monogram monogram-md" data-mi={getMonogramIndex(initialsFrom)}>
           {getInitials(initialsFrom)}
         </div>

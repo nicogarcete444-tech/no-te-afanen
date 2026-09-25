@@ -1436,8 +1436,15 @@
 }
 .price-freshness-refresh:disabled{color:var(--ink-faint);cursor:default;text-decoration:none;}
 
-/* --- hojas: overlay real y ancho contenido en escritorio --- */
-.cart-overlay{background:rgba(21,21,26,.35);}
+/* --- hojas: overlay real y ancho contenido en escritorio ---
+   La hoja ocupa toda la pantalla (inset:0) pero solo las esquinas de
+   arriba son redondeadas: ese redondeo siempre deja ver un triangulito del
+   overlay detrás, en las dos esquinas de arriba. Con el overlay al 35% (el
+   mismo que usa el menú de cuenta, pensado para taparlo todo por completo)
+   ese triangulito quedaba gris lavado en vez de oscuro — se leía como una
+   mancha, no como fondo. Acá va más oscuro y con un blur suave, así esas
+   esquinas se ven como el recorte de un scrim a propósito. */
+.cart-overlay{background:rgba(10,10,14,.6);backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);}
 .cart-sheet{
   max-width:600px;margin:0 auto;left:0;right:0;
   border-radius:var(--r-xl) var(--r-xl) 0 0;

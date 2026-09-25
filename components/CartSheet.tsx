@@ -5,28 +5,17 @@ import { CATEGORY_COLORS } from '@/lib/categories';
 import { fmt } from '@/lib/format';
 import { cartStats, potentialSavings } from '@/lib/cartStats';
 import { CartMap, Product, lowestKnownPrice } from '@/lib/types';
-import { eanFromCartId, getProductImageUrl, getProductImageUrlByName } from '@/lib/productImage';
+import { useCartItemPhoto } from '@/lib/productImage';
 import { StoredCart } from '@/lib/cart';
 import { CartTemplate, deleteTemplate, listTemplates, saveTemplate } from '@/lib/cartTemplates';
 import { buildShareUrl } from '@/lib/sharedCart';
 
 function CartItemPhoto({ id, name, ca, cb }: { id: string; name: string; ca: string; cb: string }) {
-  const [url, setUrl] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    // Si el id ya trae el EAN real (productos agregados desde la búsqueda en
-    // vivo), lo usamos directo: es más confiable que volver a adivinar el
-    // producto a partir del nombre.
-    const ean = eanFromCartId(id);
-    const lookup = ean ? getProductImageUrl(ean, name) : getProductImageUrlByName(name);
-    lookup.then((found) => {
-      if (!cancelled) setUrl(found);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [id, name]);
+  // Si el id ya trae el EAN real (productos agregados desde la búsqueda en
+  // vivo), useCartItemPhoto lo usa directo; si no, resuelve por nombre. Si
+  // la foto elegida rompe al cargar, prueba sola la siguiente fuente antes
+  // de rendirse al respaldo de color.
+  const { url, onImageError } = useCartItemPhoto(id, name);
 
   if (url) {
     return (
@@ -39,7 +28,7 @@ function CartItemPhoto({ id, name, ca, cb }: { id: string; name: string; ca: str
           loading="lazy"
           decoding="async"
           style={{ width: '100%', height: '100%', objectFit: 'contain' }}
-          onError={() => setUrl(null)}
+          onError={onImageError}
         />
       </div>
     );

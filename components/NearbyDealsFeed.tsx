@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { fmt } from '@/lib/format';
-import { getProductImageUrl } from '@/lib/productImage';
+import { useProductPhoto } from '@/lib/productImage';
 import { findNearbyDeals, NearbyDeal } from '@/lib/nearbyDeals';
 import { getInitials, getMonogramIndex } from '@/lib/monogram';
 import { LiveItem } from '@/lib/liveItems';
@@ -15,33 +15,19 @@ import ProductDetailSheet, { ProductDetailInfo } from './ProductDetailSheet';
 // del producto por EAN y, mientras no hay nada, muestra el monograma de
 // respaldo (iniciales sobre un color) en vez de dejar el hueco vacío.
 function DealMedia({ ean, nombre, marca }: { ean: string; nombre: string; marca?: string }) {
-  const [url, setUrl] = useState<string | null>(null);
-  const [buscando, setBuscando] = useState(true);
-
-  useEffect(() => {
-    let cancelled = false;
-    setBuscando(true);
-    getProductImageUrl(ean, nombre).then((found) => {
-      if (cancelled) return;
-      setUrl(found);
-      setBuscando(false);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [ean, nombre]);
+  const { url, loading, onImageError } = useProductPhoto(ean, nombre);
 
   if (url) {
     return (
       <div className="deal-card-media has-photo">
-        <img src={url} alt="" width={64} height={64} loading="lazy" decoding="async" onError={() => setUrl(null)} />
+        <img src={url} alt="" width={64} height={64} loading="lazy" decoding="async" onError={onImageError} />
       </div>
     );
   }
 
   return (
-    <div className={`deal-card-media${buscando ? ' loading' : ' no-photo'}`}>
-      {!buscando && (
+    <div className={`deal-card-media${loading ? ' loading' : ' no-photo'}`}>
+      {!loading && (
         // Las iniciales son las de la marca ("La Serenísima" -> "LS") cuando la
         // tenemos; si no, las del nombre.
         <div className="monogram monogram-lg" data-mi={getMonogramIndex(marca || nombre)}>

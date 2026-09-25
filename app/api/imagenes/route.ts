@@ -279,13 +279,19 @@ async function probeVtex(host: string, ean: string, deadline: number): Promise<P
   }
 }
 
-// Consulta un grupo de fuentes en paralelo y devuelve la primera con foto,
-// en el orden de la lista (no en el orden en que respondan).
-function firstHit(probes: Probe[]): string | null {
-  const hit = probes.find(
-    (p): p is { status: 'hit'; url: string } => p.status === 'hit' && isAllowedImageHost(p.url)
-  );
-  return hit ? hit.url : null;
+// Consulta un grupo de fuentes en paralelo y devuelve TODAS las que tienen
+// foto, en el orden de la lista (no en el orden en que respondan) y sin
+// duplicados. Como las fuentes de ese nivel ya se consultaron en paralelo
+// para elegir "la" foto, quedarse también con las demás no cuesta ningún
+// pedido extra: sirven de respaldo si la primera imagen rompe en el
+// navegador (link caído, hotlinking bloqueado) sin tener que volver a
+// preguntarle a nadie.
+function allHits(probes: Probe[]): string[] {
+  const urls: string[] = [];
+  for (const p of probes) {
+    if (p.status === 'hit' && isAllowedImageHost(p.url) && !urls.includes(p.url)) urls.push(p.url);
+  }
+  return urls;
 }
 
 // Solo se devuelven fotos de dominios que la CSP de la app deja cargar (ver
@@ -311,43 +317,50 @@ function isAllowedImageHost(url: string): boolean {
   }
 }
 
-// Foto de UN producto, pasando por los niveles en orden. `complete` es false
+// Fotos de UN producto, pasando por los niveles en orden. `complete` es false
 // si ninguna fuente tuvo foto Y alguna falló (no se puede afirmar "sin foto").
+// `urls` viene ordenada por prioridad: la primera es la que se muestra, las
+// siguientes son respaldo para el navegador si esa falla al cargar. Una vez
+// que un nivel tiene algo, ahí se corta: los niveles siguientes NO se
+// consultan (ni para elegir foto ni para juntar respaldos), así se mantiene
+// la misma cantidad de pedidos que antes.
 async function resolveOne(
   ean: string,
   name: string | undefined,
   deadline: number,
   limit: <T>(fn: () => Promise<T>) => Promise<T>
-): Promise<{ url: string | null; complete: boolean }> {
+): Promise<{ urls: string[]; complete: boolean }> {
   let failed = false;
 
   // Nivel 1: bases abiertas, en paralelo (cada una cubre un rubro).
   const l1 = await Promise.all(OFF_DOMAINS.map((d) => limit(() => probeOpenFacts(d, ean, deadline))));
-  const u1 = firstHit(l1);
-  if (u1) return { url: u1, complete: true };
+  const h1 = allHits(l1);
+  if (h1.length) return { urls: h1, complete: true };
   if (l1.some((p) => p.status === 'error')) failed = true;
 
-  if (!STORE_LOOKUP_ENABLED) return { url: null, complete: !failed };
+  if (!STORE_LOOKUP_ENABLED) return { urls: [], complete: !failed };
 
   // Nivel 2: las 4 tiendas grandes por código de barras exacto. Solo si el
   // nivel 1 no tuvo.
   const l2 = await Promise.all(VTEX_STORES.map((h) => limit(() => probeVtex(h, ean, deadline))));
-  const u2 = firstHit(l2);
-  if (u2) return { url: u2, complete: true };
+  const h2 = allHits(l2);
+  if (h2.length) return { urls: h2, complete: true };
   if (l2.some((p) => p.status === 'error')) failed = true;
 
   // Nivel 2b: segundo grupo de tiendas. Solo si el primero no tuvo nada.
   const l2b = await Promise.all(VTEX_STORES_2.map((h) => limit(() => probeVtex(h, ean, deadline))));
-  const u2b = firstHit(l2b);
-  if (u2b) return { url: u2b, complete: true };
+  const h2b = allHits(l2b);
+  if (h2b.length) return { urls: h2b, complete: true };
   if (l2b.some((p) => p.status === 'error')) failed = true;
 
-  // Nivel 3: MercadoLibre, validando el título. Último recurso.
+  // Nivel 3: MercadoLibre, validando el título. Último recurso (una sola
+  // fuente, así que no hay de dónde sacar un respaldo extra sin gastar otro
+  // pedido).
   const l3 = await limit(() => probeMercadoLibre(ean, name, deadline));
-  if (l3.status === 'hit' && isAllowedImageHost(l3.url)) return { url: l3.url, complete: true };
+  if (l3.status === 'hit' && isAllowedImageHost(l3.url)) return { urls: [l3.url], complete: true };
   if (l3.status === 'error') failed = true;
 
-  return { url: null, complete: !failed };
+  return { urls: [], complete: !failed };
 }
 
 export async function GET(request: NextRequest) {
@@ -403,17 +416,20 @@ export async function GET(request: NextRequest) {
   // orden.
   const results = await Promise.all(eans.map((ean) => resolveOne(ean, nameByEan.get(ean), deadline, budgetedLimit)));
 
-  const imagenes: Record<string, string | null> = {};
+  // imagenes[ean] es un array de URLs ordenadas por prioridad (puede tener
+  // más de una: ver el comentario de allHits/resolveOne). Array vacío =
+  // ninguna fuente la tiene confirmado.
+  const imagenes: Record<string, string[]> = {};
   const pendientes: string[] = [];
   eans.forEach((ean, i) => {
-    imagenes[ean] = results[i].url;
-    if (!results[i].url && !results[i].complete) pendientes.push(ean);
+    imagenes[ean] = results[i].urls;
+    if (!results[i].urls.length && !results[i].complete) pendientes.push(ean);
   });
 
   // Caché según qué tan firme es la respuesta: todas con foto = un mes;
   // alguna "sin foto" confirmada = un día (alguien puede cargarla); alguna
   // fuente falló = un minuto (que se reintente enseguida).
-  const anyMiss = eans.some((e) => !imagenes[e]);
+  const anyMiss = eans.some((e) => !imagenes[e].length);
   const maxAge = pendientes.length ? PENDING_CACHE_SECONDS : anyMiss ? MISS_CACHE_SECONDS : CACHE_SECONDS;
 
   return NextResponse.json(
