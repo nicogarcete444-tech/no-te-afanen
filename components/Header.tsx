@@ -422,7 +422,11 @@ export default function Header({
                         </div>
                         <div className="account-head-text">
                           <div className="account-head-title">{userEmail}</div>
-                          <div className="account-head-sub">{premium ? 'Plan Premium' : 'Plan free'}</div>
+                          <div className="account-head-sub">
+                            <span className={`account-plan-pill${premium ? ' is-premium' : ''}`}>
+                              {premium ? 'Premium' : 'Free'}
+                            </span>
+                          </div>
                         </div>
                       </div>
 
@@ -500,9 +504,10 @@ export default function Header({
                           <div className="account-head-text">
                             <div className="account-head-title">{userEmail}</div>
                             <div className="account-head-sub">
-                              {premium ? 'Plan Premium' : 'Plan free'}
-                              <span className="account-head-sub-dot" aria-hidden="true">·</span>
-                              Ver perfil
+                              <span className={`account-plan-pill${premium ? ' is-premium' : ''}`}>
+                                {premium ? 'Premium' : 'Free'}
+                              </span>
+                              <span className="account-head-cta">Ver perfil</span>
                             </div>
                           </div>
                           <span className="account-head-chevron" aria-hidden="true">
