@@ -274,7 +274,7 @@ export default function Header({
                     <>
                       <div className="notif-title">Avisos de precio</div>
                       <div className="notif-empty">
-                        Creá tu cuenta gratis, tocá &quot;Seguir&quot; en un producto y te avisamos cuando suba o baje de precio.
+                        Creá tu cuenta gratis, tocá "Seguir" en un producto y te avisamos cuando suba o baje de precio.
                       </div>
                       <Link className="account-row account-row-accent" href="/login" onClick={() => setNotifOpen(false)}>
                         <AccountIcon name="cuenta" />
@@ -309,7 +309,7 @@ export default function Header({
                     <div className="notif-empty">Cargando avisos…</div>
                   ) : notifications.length === 0 ? (
                     <div className="notif-empty">
-                      Todavía no hay avisos. Tocá &quot;Seguir&quot; en un producto para que te avisemos si sube o baja de precio.
+                      Todavía no hay avisos. Tocá "Seguir" en un producto para que te avisemos si sube o baja de precio.
                     </div>
                   ) : (
                     notifications.map((n) => (

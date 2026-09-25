@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { isRateLimited } from '@/lib/apiSecurity';
-import { readJsonBody } from '@/lib/readJsonBody';
+import { getClientIp, isRateLimited } from '@/lib/apiSecurity';
 
 // Guarda (o actualiza) la PushSubscription del usuario logueado. Requiere
 // sesión: las alertas push, igual que las de bajada de precio in-app, están
@@ -10,12 +9,16 @@ export async function POST(request: NextRequest) {
   // Esta ruta escribe en la base. Sin tope, alguien con una sesión válida
   // (o un script con una cuenta descartable) podía llenar push_subscriptions
   // a fuerza de endpoints inventados.
-  if (await isRateLimited(request, 'push-sub', 20)) {
+  if (isRateLimited('push-sub:' + getClientIp(request), 20)) {
     return NextResponse.json({ error: 'Demasiados pedidos. Esperá un momento.' }, { status: 429 });
   }
 
-  const body = await readJsonBody<{ endpoint?: unknown; p256dh?: unknown; auth?: unknown }>(request, 4096);
-  if (!body) return NextResponse.json({ error: 'Body inválido o demasiado grande.' }, { status: 400 });
+  let body: any;
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: 'Body inválido.' }, { status: 400 });
+  }
 
   const endpoint = typeof body?.endpoint === 'string' ? body.endpoint : null;
   const p256dh = typeof body?.p256dh === 'string' ? body.p256dh : null;

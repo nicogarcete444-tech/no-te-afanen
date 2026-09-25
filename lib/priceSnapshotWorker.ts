@@ -212,7 +212,7 @@ export async function runPriceSnapshotBatch(): Promise<SnapshotRunResult> {
                     watchers.map((w) =>
                       sendPushToUser(w.user_id, {
                         title: direction === 'bajo' ? 'Bajó de precio' : 'Subió de precio',
-                        body: `${nombre || ean}: ${direction === 'bajo' ? '-' : '+'}${pctAbs}% (referencia CABA)`,
+                        body: `${nombre || ean}: ${direction === 'bajo' ? '-' : '+'}${pctAbs}%`,
                         url: '/',
                         tag: `price-change-${ean}`,
                       })

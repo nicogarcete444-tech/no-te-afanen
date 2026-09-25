@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { PRECIOS_CLAROS_BASE, fetchPreciosClaros } from '@/lib/preciosClarosBase';
-import { isRateLimited, parseLat, parseLimit, parseLng, RATE_LIMITS } from '@/lib/apiSecurity';
+import { getClientIp, isRateLimited, parseLat, parseLimit, parseLng, RATE_LIMITS } from '@/lib/apiSecurity';
 
 // Igual que /api/productos: le da margen al timeout + reintento de
 // fetchPreciosClaros.
@@ -8,7 +8,7 @@ export const maxDuration = 20;
 
 // Igual que /api/productos: corre en el servidor de Vercel para evitar CORS.
 export async function GET(request: NextRequest) {
-  if (await isRateLimited(request, 'sucursales', RATE_LIMITS.sucursales)) {
+  if (isRateLimited('sucursales:' + getClientIp(request), RATE_LIMITS.sucursales)) {
     return NextResponse.json({ error: 'Demasiadas consultas. Esperá un momento.' }, { status: 429 });
   }
 
