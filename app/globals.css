@@ -850,6 +850,18 @@
   width:100%;max-width:376px;background:var(--surface);border:1px solid var(--line);
   border-radius:var(--r-xl);padding:30px 26px;box-shadow:var(--shadow-md);
 }
+/* Celular: nada de tarjeta flotando en un fondo vacío — la pantalla de
+   acceso ocupa todo, como el resto de la app. La tarjeta con borde y
+   sombra queda solo para pantallas anchas, donde sí hay lugar alrededor
+   para que se note que es una tarjeta. */
+@media (max-width:599px){
+  .auth-wrap{padding:0;background:var(--bg);}
+  .auth-card{
+    max-width:none;min-height:100dvh;
+    border:none;border-radius:0;box-shadow:none;
+    padding:max(24px, env(safe-area-inset-top)) 20px calc(24px + env(safe-area-inset-bottom));
+  }
+}
 .auth-back{
   display:flex;align-items:center;gap:6px;background:none;border:none;cursor:pointer;
   color:var(--ink-soft);font-size:13.5px;font-weight:600;padding:0;margin-bottom:18px;
@@ -1072,7 +1084,7 @@
 .account-row + .account-row,
 .account-rows > .account-premium-badge + .account-row,
 .account-row + .account-premium-badge{border-top:1px solid var(--line);}
-.account-row span{flex:1;min-width:0;}
+.account-row > span:not(.account-row-icon):not(.account-row-badge){flex:1;min-width:0;}
 .account-row-chevron{color:var(--ink-faint) !important;flex-shrink:0;}
 .account-row:hover{background:var(--surface);}
 .account-row-accent{color:var(--accent);}
