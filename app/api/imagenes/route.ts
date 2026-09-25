@@ -94,17 +94,6 @@ const PROVIDER_REVALIDATE = 60 * 60 * 24 * 3;
 // Tiempo máximo total del pedido (la función corta a los 25s).
 const TOTAL_BUDGET_MS = 20_000;
 const PER_CALL_TIMEOUT_MS = 4_000;
-// Cuántas conexiones salientes van a la vez (así no se golpea a una fuente
-// con cientos de pedidos simultáneos). Esto, junto con TOTAL_BUDGET_MS y el
-// timeout por llamada, es lo que de verdad acota cuánto puede tardar y
-// cuánto trabajo hace un pedido — no hace falta además un tope de "cantidad
-// total de llamadas": ese tope existió (MAX_PROBES_PER_REQUEST = 30) y era
-// el motivo real por el que, con más de 7-8 productos en un mismo pedido, la
-// mayoría se quedaba sin ni siquiera consultar ninguna fuente (se marcaban
-// como fallidos apenas se pedían, antes de mandar el fetch). budget(deadline)
-// ya se encarga de cortar en seco (sin red) apenas queda poco tiempo, así que
-// el presupuesto de tiempo es la única traba que hace falta.
-const MAX_CONCURRENT_CALLS = 12;
 
 // Open Food Facts pide identificarse. Sin esto, los pedidos anónimos entran
 // en la cola lenta o directamente se rechazan.
@@ -128,8 +117,19 @@ type Probe = { status: 'hit'; url: string } | { status: 'miss' } | { status: 'er
 const MISS: Probe = { status: 'miss' };
 const ERROR: Probe = { status: 'error' };
 
-// Límite de pedidos salientes simultáneos: 60 productos x 4-9 fuentes serían
-// cientos de pedidos a la vez y las fuentes empiezan a rechazar (429).
+// Límite de pedidos salientes simultáneos CONTRA UNA MISMA FUENTE: si a la
+// vez hay 60 productos pidiendo foto, no queremos mandarle 60 pedidos juntos
+// a openfoodfacts.org (empieza a rechazar con 429). Antes este límite era
+// UNO SOLO compartido entre TODAS las fuentes (12 en total en todo el
+// pedido): si en un momento dado la mayoría de las conexiones activas eran
+// contra una sola fuente lenta, las demás fuentes se quedaban esperando su
+// turno sin necesidad, y esa espera de más es justamente lo que hacía que el
+// presupuesto de tiempo (TOTAL_BUDGET_MS) se gastara antes de llegar a
+// consultar a todos los productos. Con un limitador POR FUENTE, cada una
+// tiene su propio cupo de conexiones y no se pisan entre sí: se hacen más
+// pedidos en paralelo sin mandarle más carga de la debida a ninguna fuente
+// en particular.
+const PER_SOURCE_CONCURRENCY = 8;
 function createLimiter(max: number) {
   let active = 0;
   const waiting: (() => void)[] = [];
@@ -143,6 +143,16 @@ function createLimiter(max: number) {
       waiting.shift()?.();
     }
   };
+}
+
+const sourceLimiters = new Map<string, ReturnType<typeof createLimiter>>();
+function limiterFor(source: string): ReturnType<typeof createLimiter> {
+  let l = sourceLimiters.get(source);
+  if (!l) {
+    l = createLimiter(PER_SOURCE_CONCURRENCY);
+    sourceLimiters.set(source, l);
+  }
+  return l;
 }
 
 // Cuánto tiempo le queda a este pedido para una llamada más (0 = ya no).
@@ -339,16 +349,12 @@ function isAllowedImageHost(url: string): boolean {
 // que un nivel tiene algo, ahí se corta: los niveles siguientes NO se
 // consultan (ni para elegir foto ni para juntar respaldos), así se mantiene
 // la misma cantidad de pedidos que antes.
-async function resolveOne(
-  ean: string,
-  name: string | undefined,
-  deadline: number,
-  limit: <T>(fn: () => Promise<T>) => Promise<T>
-): Promise<{ urls: string[]; complete: boolean }> {
+async function resolveOne(ean: string, name: string | undefined, deadline: number): Promise<{ urls: string[]; complete: boolean }> {
   let failed = false;
 
-  // Nivel 1: bases abiertas, en paralelo (cada una cubre un rubro).
-  const l1 = await Promise.all(OFF_DOMAINS.map((d) => limit(() => probeOpenFacts(d, ean, deadline))));
+  // Nivel 1: bases abiertas, en paralelo (cada una cubre un rubro, cada una
+  // con su propio cupo de conexiones vía limiterFor).
+  const l1 = await Promise.all(OFF_DOMAINS.map((d) => limiterFor(d)(() => probeOpenFacts(d, ean, deadline))));
   const h1 = allHits(l1);
   if (h1.length) return { urls: h1, complete: true };
   if (l1.some((p) => p.status === 'error')) failed = true;
@@ -357,13 +363,13 @@ async function resolveOne(
 
   // Nivel 2: las 4 tiendas grandes por código de barras exacto. Solo si el
   // nivel 1 no tuvo.
-  const l2 = await Promise.all(VTEX_STORES.map((h) => limit(() => probeVtex(h, ean, deadline))));
+  const l2 = await Promise.all(VTEX_STORES.map((h) => limiterFor(h)(() => probeVtex(h, ean, deadline))));
   const h2 = allHits(l2);
   if (h2.length) return { urls: h2, complete: true };
   if (l2.some((p) => p.status === 'error')) failed = true;
 
   // Nivel 2b: segundo grupo de tiendas. Solo si el primero no tuvo nada.
-  const l2b = await Promise.all(VTEX_STORES_2.map((h) => limit(() => probeVtex(h, ean, deadline))));
+  const l2b = await Promise.all(VTEX_STORES_2.map((h) => limiterFor(h)(() => probeVtex(h, ean, deadline))));
   const h2b = allHits(l2b);
   if (h2b.length) return { urls: h2b, complete: true };
   if (l2b.some((p) => p.status === 'error')) failed = true;
@@ -371,7 +377,7 @@ async function resolveOne(
   // Nivel 3: MercadoLibre, validando el título. Último recurso (una sola
   // fuente, así que no hay de dónde sacar un respaldo extra sin gastar otro
   // pedido).
-  const l3 = await limit(() => probeMercadoLibre(ean, name, deadline));
+  const l3 = await limiterFor('mercadolibre')(() => probeMercadoLibre(ean, name, deadline));
   if (l3.status === 'hit' && isAllowedImageHost(l3.url)) return { urls: [l3.url], complete: true };
   if (l3.status === 'error') failed = true;
 
@@ -420,16 +426,11 @@ export async function GET(request: NextRequest) {
   }
 
   const deadline = Date.now() + TOTAL_BUDGET_MS;
-  const limit = createLimiter(MAX_CONCURRENT_CALLS);
 
   // Los productos van en paralelo entre sí; cada uno recorre sus niveles en
-  // orden. limit() ya acota cuántas conexiones salientes hay a la vez, y
-  // budget(deadline) corta en seco (sin mandar el pedido) apenas queda poco
-  // tiempo del presupuesto total: entre las dos cosas alcanza para no
-  // pasarse ni de tiempo ni de conexiones simultáneas, sin necesitar además
-  // un tope artificial de "cantidad total de llamadas" que cortaba productos
-  // de forma pareja.
-  const results = await Promise.all(eans.map((ean) => resolveOne(ean, nameByEan.get(ean), deadline, limit)));
+  // orden, y cada llamada usa el limitador de SU fuente (limiterFor) en vez
+  // de un único cupo compartido por todo el pedido.
+  const results = await Promise.all(eans.map((ean) => resolveOne(ean, nameByEan.get(ean), deadline)));
 
   // imagenes[ean] es un array de URLs ordenadas por prioridad (puede tener
   // más de una: ver el comentario de allHits/resolveOne). Array vacío =

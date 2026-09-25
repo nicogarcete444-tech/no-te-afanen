@@ -74,7 +74,16 @@ async function flush() {
   // no se cachean en la sesión, así se reintentan la próxima vez.
   let pendientes = new Set<string>();
   try {
-    const res = await fetch(`/api/imagenes?eans=${eans.join(',')}&names=${names}`);
+    let res = await fetch(`/api/imagenes?eans=${eans.join(',')}&names=${names}`);
+    // 429 = se pasó el límite de pedidos por minuto. Con varias pantallas
+    // llenas de productos cargando junto (más de 60), puede pasar aunque el
+    // tope esté bien puesto. En vez de darle "sin foto" a todo ese lote (y
+    // dejarlo así, porque nada lo reintenta después), esperamos un toque y
+    // probamos una vez más — para entonces el cupo del minuto ya avanzó.
+    if (res.status === 429) {
+      await new Promise((r) => setTimeout(r, 1500));
+      res = await fetch(`/api/imagenes?eans=${eans.join(',')}&names=${names}`);
+    }
     if (res.ok) {
       const data = await res.json();
       imagenes = data?.imagenes || {};

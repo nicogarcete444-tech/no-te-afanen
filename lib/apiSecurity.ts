@@ -22,8 +22,16 @@ export const RATE_LIMITS = {
   productos: 120,
   producto: 120,
   sucursales: 40,
-  // Cada pedido trae hasta 60 fotos de una, así que con pocos alcanza.
-  imagenes: 60,
+  // Una sola pantalla (rubro o resultado de búsqueda) puede mostrar bien
+  // por encima de 60 productos (CATALOG_QUERIES_PER_PAGE x
+  // CATALOG_RESULTS_PER_QUERY ronda los 96), y el navegador los pide en
+  // lotes de hasta 60 (MAX_PER_REQUEST en lib/productImage.ts): el primer
+  // lote ya gastaba TODO este cupo cuando estaba en 60, y el segundo lote
+  // (los productos que sobraban) se rechazaba con 429 unos milisegundos
+  // después — esos productos se quedaban sin foto aunque las fuentes sí la
+  // tuvieran, nunca se les llegó a preguntar. El tope tiene que cubrir más
+  // de una pantalla llena por minuto, no solo un lote.
+  imagenes: 300,
 } as const;
 
 const hits = new Map<string, number[]>();
