@@ -1,0 +1,22 @@
+# dependencias
+/node_modules
+
+# build de Next.js
+/.next/
+/out/
+
+# artefacto incremental de TypeScript (se regenera solo, no debe versionarse)
+*.tsbuildinfo
+
+# env
+.env*.local
+.env
+
+# logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# sistema
+.DS_Store
+*.pem

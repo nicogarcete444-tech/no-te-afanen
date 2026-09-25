@@ -5,26 +5,17 @@
 // queda la parte del navegador, y lo importante es esto: los pedidos se
 // AGRUPAN.
 //
-// Cada tarjeta de producto llama a getProductImageUrls() por su cuenta al
+// Cada tarjeta de producto llama a getProductImageUrl() por su cuenta al
 // montarse. Si cada llamada disparara su propio fetch, volveríamos al
 // problema original (cientos de pedidos en paralelo). En vez de eso, las
 // llamadas que ocurren dentro de la misma ventana de unos milisegundos se
 // juntan en un solo pedido con todos los códigos.
-//
-// El server devuelve, por cada EAN, un ARRAY de URLs ordenadas por prioridad
-// (no una sola): normalmente es una, pero cuando el nivel que encontró la
-// foto tenía más de una fuente con resultado, vienen todas. Sirve de
-// respaldo: si la primera imagen rompe en el navegador (link caído,
-// hotlinking bloqueado por la tienda) se prueba la siguiente de la MISMA
-// respuesta, sin pedirle nada de nuevo al server ni pisarse con otra tarjeta
-// que esté resolviendo su propio EAN en paralelo (cada una tiene su propio
-// array e índice, ver useProductPhoto más abajo).
 
 const CHUNK_DELAY_MS = 40;
 const MAX_PER_REQUEST = 60;
 
-const cache = new Map<string, string[]>();
-const pending = new Map<string, { resolve: (v: string[]) => void }[]>();
+const cache = new Map<string, string | null>();
+const pending = new Map<string, { resolve: (v: string | null) => void }[]>();
 // Nombre "de mejor esfuerzo" para cada EAN en cola: el server lo usa SOLO
 // como respaldo, para validar una foto de MercadoLibre cuando ninguna de
 // las bases abiertas ni las tiendas tienen nada (ver /api/imagenes). Si dos tarjetas
@@ -54,7 +45,7 @@ async function flush() {
 
   // Sacamos de la cola lo que se va en este pedido; lo que quede (más de 60)
   // se manda en la tanda siguiente.
-  const waiters = new Map<string, { resolve: (v: string[]) => void }[]>();
+  const waiters = new Map<string, { resolve: (v: string | null) => void }[]>();
   eans.forEach((ean) => {
     waiters.set(ean, pending.get(ean)!);
     pending.delete(ean);
@@ -69,21 +60,12 @@ async function flush() {
     .join(',');
   eans.forEach((ean) => pendingNames.delete(ean));
 
-  let imagenes: Record<string, string[]> = {};
+  let imagenes: Record<string, string | null> = {};
   // EAN para los que alguna fuente falló y no se pudo confirmar "sin foto":
   // no se cachean en la sesión, así se reintentan la próxima vez.
   let pendientes = new Set<string>();
   try {
-    let res = await fetch(`/api/imagenes?eans=${eans.join(',')}&names=${names}`);
-    // 429 = se pasó el límite de pedidos por minuto. Con varias pantallas
-    // llenas de productos cargando junto (más de 60), puede pasar aunque el
-    // tope esté bien puesto. En vez de darle "sin foto" a todo ese lote (y
-    // dejarlo así, porque nada lo reintenta después), esperamos un toque y
-    // probamos una vez más — para entonces el cupo del minuto ya avanzó.
-    if (res.status === 429) {
-      await new Promise((r) => setTimeout(r, 1500));
-      res = await fetch(`/api/imagenes?eans=${eans.join(',')}&names=${names}`);
-    }
+    const res = await fetch(`/api/imagenes?eans=${eans.join(',')}&names=${names}`);
     if (res.ok) {
       const data = await res.json();
       imagenes = data?.imagenes || {};
@@ -96,16 +78,10 @@ async function flush() {
   }
 
   waiters.forEach((list, ean) => {
-    const raw = imagenes[ean];
-    // Por si el navegador o el CDN todavía tienen guardada (hasta un mes,
-    // ver CACHE_SECONDS en el server) una respuesta VIEJA con una sola URL
-    // como texto en vez de un array: la tratamos igual como si trajera una
-    // sola candidata, en vez de descartarla como "sin foto". Así ninguna
-    // foto desaparece mientras esos caches viejos van venciendo solos.
-    const urls = Array.isArray(raw) ? raw : typeof raw === 'string' && raw ? [raw] : [];
+    const url = Object.prototype.hasOwnProperty.call(imagenes, ean) ? imagenes[ean] : null;
     // Solo cacheamos si el server llegó a contestar algo sobre este código.
-    if (Object.prototype.hasOwnProperty.call(imagenes, ean) && !pendientes.has(ean)) cache.set(ean, urls);
-    list.forEach((w) => w.resolve(urls));
+    if (Object.prototype.hasOwnProperty.call(imagenes, ean) && !pendientes.has(ean)) cache.set(ean, url);
+    list.forEach((w) => w.resolve(url));
   });
 }
 
@@ -113,20 +89,14 @@ async function flush() {
 // comentario de pendingNames arriba); si no se pasa, el producto igual se
 // resuelve normal contra las 3 bases, simplemente no hay fallback de
 // MercadoLibre para él.
-//
-// Devuelve TODAS las URLs candidatas para ese EAN, ordenadas por prioridad
-// (array vacío = confirmado sin foto). Para el caso común de "quiero una
-// sola URL para mostrar" está getProductImageUrl más abajo; para el caso de
-// una <img> con onError que tiene que probar la siguiente si la primera
-// rompe, usar directamente esta función (o el hook useProductPhoto).
-export async function getProductImageUrls(
+export async function getProductImageUrl(
   ean: string | undefined | null,
   name?: string | null
-): Promise<string[]> {
-  if (!ean || !isValidEan(ean)) return [];
+): Promise<string | null> {
+  if (!ean || !isValidEan(ean)) return null;
   if (cache.has(ean)) return cache.get(ean)!;
 
-  return new Promise<string[]>((resolve) => {
+  return new Promise<string | null>((resolve) => {
     if (name && !pendingNames.has(ean)) pendingNames.set(ean, name);
     const list = pending.get(ean);
     if (list) {
@@ -136,16 +106,6 @@ export async function getProductImageUrls(
     }
     if (!flushTimer) flushTimer = setTimeout(flush, CHUNK_DELAY_MS);
   });
-}
-
-// Wrapper de compatibilidad: solo la primera URL (o null). Para componentes
-// que no necesitan reintentar con una fuente alternativa si la imagen rompe.
-export async function getProductImageUrl(
-  ean: string | undefined | null,
-  name?: string | null
-): Promise<string | null> {
-  const urls = await getProductImageUrls(ean, name);
-  return urls[0] ?? null;
 }
 
 // --- Buscar el EAN a partir del nombre -------------------------------------
@@ -198,83 +158,6 @@ export function photoLookupName(item: { nombre?: string; presentacion?: string; 
 export async function getProductImageUrlByName(name: string): Promise<string | null> {
   const ean = await getEanByName(name);
   return getProductImageUrl(ean, name);
-}
-
-export async function getProductImageUrlsByName(name: string): Promise<string[]> {
-  const ean = await getEanByName(name);
-  return getProductImageUrls(ean, name);
-}
-
-// --- Hook: foto con fallback automático entre fuentes -----------------------
-// Cada componente que muestra una foto (tarjeta, ficha, carrito, feed de
-// ofertas) repetía el mismo patrón: pedir la URL, guardarla en estado, y si
-// el <img> tira onError, volver al monograma. Este hook centraliza eso Y
-// agrega el paso que faltaba: antes de rendirse al monograma, prueba la
-// URL SIGUIENTE del array que ya trajo getProductImageUrls (sin pedir nada
-// de nuevo al server). Cada instancia del hook tiene su propio índice, así
-// que dos tarjetas resolviendo EANs distintos en paralelo nunca se pisan
-// entre sí.
-import { useEffect, useRef, useState } from 'react';
-
-export function useProductPhoto(ean: string | null | undefined, name: string) {
-  const [urls, setUrls] = useState<string[]>([]);
-  const [index, setIndex] = useState(0);
-  const [loading, setLoading] = useState(!!ean);
-  // Evita que una respuesta que llega tarde (EAN/nombre viejo, tarjeta
-  // reciclada por una lista virtualizada) pise el estado de la petición
-  // actual.
-  const requestId = useRef(0);
-
-  useEffect(() => {
-    const id = ++requestId.current;
-    setIndex(0);
-    if (!ean) {
-      setUrls([]);
-      setLoading(false);
-      return;
-    }
-    setLoading(true);
-    getProductImageUrls(ean, name).then((found) => {
-      if (requestId.current !== id) return;
-      setUrls(found);
-      setLoading(false);
-    });
-  }, [ean, name]);
-
-  return {
-    url: urls[index] ?? null,
-    loading,
-    // Se llama desde el onError de la <img>: pasa a la próxima fuente si
-    // queda alguna; si no queda ninguna, url vuelve null y el componente
-    // muestra su respaldo (monograma).
-    onImageError: () => setIndex((i) => i + 1),
-  };
-}
-
-// Misma idea que useProductPhoto, pero para productos del carrito: el id
-// puede traer el EAN directo ("live:<ean>") o no, y en ese caso hay que
-// resolverlo por nombre (ver getEanByName más arriba). Se usa en
-// CartSheet.tsx.
-export function useCartItemPhoto(id: string, name: string) {
-  const [urls, setUrls] = useState<string[]>([]);
-  const [index, setIndex] = useState(0);
-  const requestId = useRef(0);
-
-  useEffect(() => {
-    const reqId = ++requestId.current;
-    setIndex(0);
-    const ean = eanFromCartId(id);
-    const lookup = ean ? getProductImageUrls(ean, name) : getProductImageUrlsByName(name);
-    lookup.then((found) => {
-      if (requestId.current !== reqId) return;
-      setUrls(found);
-    });
-  }, [id, name]);
-
-  return {
-    url: urls[index] ?? null,
-    onImageError: () => setIndex((i) => i + 1),
-  };
 }
 
 // --- Escaneo de código de barras -------------------------------------------

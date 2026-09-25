@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { CATEGORY_COLORS } from '@/lib/categories';
 import { fmt } from '@/lib/format';
-import { getProductImageUrls } from '@/lib/productImage';
+import { getProductImageUrl } from '@/lib/productImage';
 import { fetchStorePriceDetails, NearbyStore, StorePriceDetail } from '@/lib/storePrices';
 import { getStoreBuyUrl } from '@/lib/storeLinks';
 import { getPriceHistory, PricePoint, trackProduct } from '@/lib/priceHistory';
@@ -68,7 +68,6 @@ function PriceHistoryChart({ history }: { history: PricePoint[] }) {
           {pctChange === 0 ? 'sin cambios' : `${pctChange > 0 ? '+' : ''}${pctChange}%`}
         </span>
       </div>
-      <p className="pd-history-range">Referencia de sucursales cercanas al Obelisco (CABA); puede no representar tu zona.</p>
       <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} className="pd-history-svg">
         <polyline points={points.join(' ')} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
       </svg>
@@ -97,12 +96,7 @@ export default function ProductDetailSheet({
   onToggleCart: (priceByStore: Record<string, number>) => void;
 }) {
   const [details, setDetails] = useState<Record<string, StorePriceDetail> | null | 'loading'>(null);
-  // Array de fotos candidatas (por prioridad) e índice de cuál se está
-  // mostrando: si la actual rompe al cargar (onError), se pasa a la
-  // siguiente de la misma lista sin volver a pedirle nada al server.
-  const [photoUrls, setPhotoUrls] = useState<string[]>([]);
-  const [photoIndex, setPhotoIndex] = useState(0);
-  const photoUrl = photoUrls[photoIndex] ?? null;
+  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const [history, setHistory] = useState<PricePoint[]>([]);
   const [watching, setWatching] = useState(false);
   const [watchBusy, setWatchBusy] = useState(false);
@@ -160,15 +154,14 @@ export default function ProductDetailSheet({
 
   useEffect(() => {
     if (!open || !product) return;
-    setPhotoUrls([]);
-    setPhotoIndex(0);
+    setPhotoUrl(null);
     setDetails(product.ean && stores.length ? 'loading' : null);
     setHistory([]);
 
     let cancelled = false;
     if (product.ean) {
-      getProductImageUrls(product.ean, product.displayName).then((urls) => {
-        if (!cancelled) setPhotoUrls(urls);
+      getProductImageUrl(product.ean, product.displayName).then((url) => {
+        if (!cancelled) setPhotoUrl(url);
       });
       // Avisa que este producto se está viendo (para que el cron de
       // historial lo empiece a seguir) y trae el historial ya acumulado,
@@ -278,7 +271,7 @@ export default function ProductDetailSheet({
             <div className="pd-hero-top">
               <div className={`pd-hero-media${photoUrl ? ' has-photo' : ' no-photo'}`}>
                 {photoUrl ? (
-                  <img src={photoUrl} alt="" width={104} height={104} loading="lazy" decoding="async" onError={() => setPhotoIndex((i) => i + 1)} />
+                  <img src={photoUrl} alt="" width={104} height={104} loading="lazy" decoding="async" onError={() => setPhotoUrl(null)} />
                 ) : (
                   <svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.4} strokeLinecap="round" strokeLinejoin="round">
                     <path d={FALLBACK_ICON_PATH} />

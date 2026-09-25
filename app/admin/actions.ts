@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { isAdminUser } from '@/lib/adminAuth';
+import { isAdminEmail } from '@/lib/adminAuth';
 import { MANUAL_GRANT_DURATION_DAYS } from '@/lib/premium';
 
 // Nunca confiar en que solo un admin puede LLAMAR a esto: aunque el botón
@@ -15,7 +15,7 @@ async function requireAdmin() {
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!isAdminUser(user)) {
+  if (!isAdminEmail(user?.email)) {
     throw new Error('No autorizado');
   }
   const admin = createAdminClient();

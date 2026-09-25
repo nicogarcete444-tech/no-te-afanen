@@ -27,7 +27,6 @@ export default function Header({
   userEmail,
   isAdmin,
   onLogout,
-  onDeleteAccount,
   onOpenSavingsHistory,
   onOpenPremium,
   premium,
@@ -43,7 +42,6 @@ export default function Header({
   userEmail: string | null;
   isAdmin?: boolean;
   onLogout: () => void;
-  onDeleteAccount: () => void;
   onOpenSavingsHistory: () => void;
   onOpenPremium: () => void;
   premium: boolean;
@@ -62,12 +60,6 @@ export default function Header({
   onScan: () => void;
 }) {
   const [accountOpen, setAccountOpen] = useState(false);
-  // Si se toca el encabezado (avatar + email), se abre/cierra el bloque de
-  // "Cerrar sesión" / "Eliminar mi cuenta" ahí mismo, en vez de tenerlo
-  // siempre visible en el menú. Mismo patrón que el selector de cuenta de
-  // Google: tocás tu foto y ahí aparece "Cerrar sesión", separado de las
-  // funciones del producto (Premium, ahorros, etc.).
-  const [accountActionsOpen, setAccountActionsOpen] = useState(false);
   const accountRef = useRef<HTMLDivElement>(null);
   const [notifOpen, setNotifOpen] = useState(false);
   // Invitado: la campana se ve igual, con el puntito rojo hasta que la toca
@@ -207,13 +199,6 @@ export default function Header({
     if (openAccountSignal) setAccountOpen(true);
   }, [openAccountSignal]);
 
-  // Al cerrar el menú, que la próxima vez que se abra arranque de nuevo
-  // colapsado (si no, alguien lo dejaba abierto sin querer y el menú
-  // "arrancaba" siempre mostrando cerrar sesión).
-  useEffect(() => {
-    if (!accountOpen) setAccountActionsOpen(false);
-  }, [accountOpen]);
-
   // Escape cierra los dos paneles del header.
   useEffect(() => {
     if (!accountOpen && !notifOpen) return;
@@ -289,7 +274,7 @@ export default function Header({
                     <>
                       <div className="notif-title">Avisos de precio</div>
                       <div className="notif-empty">
-                        Creá tu cuenta gratis, tocá &quot;Seguir&quot; en un producto y te avisamos cuando suba o baje de precio.
+                        Creá tu cuenta gratis, tocá "Seguir" en un producto y te avisamos cuando suba o baje de precio.
                       </div>
                       <Link className="account-row account-row-accent" href="/login" onClick={() => setNotifOpen(false)}>
                         <AccountIcon name="cuenta" />
@@ -324,7 +309,7 @@ export default function Header({
                     <div className="notif-empty">Cargando avisos…</div>
                   ) : notifications.length === 0 ? (
                     <div className="notif-empty">
-                      Todavía no hay avisos. Tocá &quot;Seguir&quot; en un producto para que te avisemos si sube o baja de precio.
+                      Todavía no hay avisos. Tocá "Seguir" en un producto para que te avisemos si sube o baja de precio.
                     </div>
                   ) : (
                     notifications.map((n) => (
@@ -375,74 +360,26 @@ export default function Header({
                 <div className="account-backdrop" onClick={() => setAccountOpen(false)} />
                 <div className="account-panel" role="menu">
                   <div className="account-panel-grip" />
-                  {/* Antes esto era un div fijo. Ahora, si hay sesión, es un
-                      botón: tocarlo abre/cierra "Cerrar sesión" / "Eliminar
-                      mi cuenta" ahí mismo, debajo del avatar — el mismo lugar
-                      donde uno esperaría encontrarlas (así funciona, por
-                      ejemplo, el selector de cuenta de Google). El resto del
-                      menú (Premium, ahorros, tema) no tiene nada que ver con
-                      "quién sos", así que queda afuera de este bloque. */}
-                  {userEmail ? (
-                    <button
-                      type="button"
-                      className="account-head account-head-button"
-                      aria-expanded={accountActionsOpen}
-                      onClick={() => setAccountActionsOpen((v) => !v)}
-                    >
-                      <div className="account-avatar" aria-hidden="true">
-                        {userEmail.charAt(0).toUpperCase()}
+                  <div className="account-head">
+                    <div className="account-avatar" aria-hidden="true">
+                      {userEmail ? userEmail.charAt(0).toUpperCase() : '?'}
+                    </div>
+                    <div className="account-head-text">
+                      <div className="account-head-title">
+                        {userEmail ? userEmail : 'Estás navegando sin cuenta'}
                       </div>
-                      <div className="account-head-text">
-                        <div className="account-head-title">{userEmail}</div>
-                        <div className="account-head-sub">{premium ? 'Plan Premium' : 'Plan free'}</div>
-                      </div>
-                      <svg
-                        className={`account-head-caret${accountActionsOpen ? ' is-open' : ''}`}
-                        width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"
-                      >
-                        <path d="m6 9 6 6 6-6" />
-                      </svg>
-                    </button>
-                  ) : (
-                    <div className="account-head">
-                      <div className="account-avatar" aria-hidden="true">?</div>
-                      <div className="account-head-text">
-                        <div className="account-head-title">Estás navegando sin cuenta</div>
-                        <div className="account-head-sub">Tu carrito se guarda solo en este celular</div>
+                      <div className="account-head-sub">
+                        {userEmail
+                          ? premium
+                            ? 'Plan Premium'
+                            : 'Plan free'
+                          : 'Tu carrito se guarda solo en este celular'}
                       </div>
                     </div>
-                  )}
+                  </div>
 
-                  {userEmail && accountActionsOpen && (
-                    <div className="account-danger-zone">
-                      <button
-                        className="account-plain-action"
-                        onClick={() => {
-                          setAccountOpen(false);
-                          onLogout();
-                        }}
-                      >
-                        Cerrar sesión
-                      </button>
-                      <button
-                        className="account-plain-action account-plain-action-danger"
-                        onClick={() => {
-                          setAccountOpen(false);
-                          onDeleteAccount();
-                        }}
-                      >
-                        Eliminar mi cuenta
-                      </button>
-                    </div>
-                  )}
-
-                  {/* Cada grupo es su propia tarjeta blanca sobre el fondo gris
-                      del panel (account-panel ahora usa --surface-2), en vez de
-                      una lista continua de filas: es el mismo recurso que usan
-                      Mercado Pago o Instagram en "Tu perfil" para que el ojo
-                      separe "tema" de "cuenta" de "cerrar sesión" sin tener que
-                      leer cada renglón. */}
-                  <div className="account-card">
+                  <div className="account-section-label">Preferencias</div>
+                  <div className="account-rows">
                     <div className="account-row account-row-switch">
                       <AccountIcon name="tema" />
                       <span>Tema oscuro</span>
@@ -460,59 +397,64 @@ export default function Header({
                   </div>
 
                   {userEmail ? (
-                    <>
-                      <div className="account-card">
-                        {premium ? (
-                          <div className="account-premium-badge">
-                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round">
-                              <path d="M20 6L9 17l-5-5" />
-                            </svg>
-                            Ya sos Premium
-                          </div>
-                        ) : (
-                          <button
-                            className="account-row account-row-accent"
-                            onClick={() => {
-                              setAccountOpen(false);
-                              onOpenPremium();
-                            }}
-                          >
-                            <AccountIcon name="premium" />
-                            <span>Hacerme Premium</span>
-                            <Chevron />
-                          </button>
-                        )}
+                    <div className="account-rows">
+                      {premium ? (
+                        <div className="account-premium-badge">
+                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M20 6L9 17l-5-5" />
+                          </svg>
+                          Ya sos Premium
+                        </div>
+                      ) : (
                         <button
-                          className="account-row"
+                          className="account-row account-row-accent"
                           onClick={() => {
                             setAccountOpen(false);
-                            onOpenSavingsHistory();
+                            onOpenPremium();
                           }}
                         >
-                          <AccountIcon name="ahorros" />
-                          <span>Mis ahorros</span>
+                          <AccountIcon name="premium" />
+                          <span>Hacerme Premium</span>
                           <Chevron />
                         </button>
-                        <button className="account-row" onClick={handleOpenNotifications}>
-                          <AccountIcon name="notificaciones" />
-                          <span>Productos que sigo</span>
-                          {unreadCount > 0 && <span className="account-row-badge">{unreadCount}</span>}
-                          <Chevron />
-                        </button>
-                      </div>
-
-                      {isAdmin && (
-                        <div className="account-card">
-                          <Link className="account-row" href="/admin" onClick={() => setAccountOpen(false)}>
-                            <AccountIcon name="admin" />
-                            <span>Admin</span>
-                            <Chevron />
-                          </Link>
-                        </div>
                       )}
-                    </>
+                      <button
+                        className="account-row"
+                        onClick={() => {
+                          setAccountOpen(false);
+                          onOpenSavingsHistory();
+                        }}
+                      >
+                        <AccountIcon name="ahorros" />
+                        <span>Mis ahorros</span>
+                        <Chevron />
+                      </button>
+                      <button className="account-row" onClick={handleOpenNotifications}>
+                        <AccountIcon name="notificaciones" />
+                        <span>Productos que sigo</span>
+                        {unreadCount > 0 && <span className="account-row-badge">{unreadCount}</span>}
+                        <Chevron />
+                      </button>
+                      {isAdmin && (
+                        <Link className="account-row" href="/admin" onClick={() => setAccountOpen(false)}>
+                          <AccountIcon name="admin" />
+                          <span>Admin</span>
+                          <Chevron />
+                        </Link>
+                      )}
+                      <button
+                        className="account-row account-row-danger"
+                        onClick={() => {
+                          setAccountOpen(false);
+                          onLogout();
+                        }}
+                      >
+                        <AccountIcon name="salir" />
+                        <span>Cerrar sesión</span>
+                      </button>
+                    </div>
                   ) : (
-                    <div className="account-card">
+                    <div className="account-rows">
                       <Link className="account-row account-row-accent" href="/login" onClick={() => setAccountOpen(false)}>
                         <AccountIcon name="cuenta" />
                         <span>Iniciar sesión o crear cuenta</span>

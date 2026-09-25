@@ -82,7 +82,7 @@ export async function toggleWatch(userId: string, ean: string, nombre: string, c
   }
   const { error } = await supabase.from('price_alerts').upsert(
     { user_id: userId, ean, nombre },
-    { onConflict: 'user_id,ean', ignoreDuplicates: true }
+    { onConflict: 'user_id,ean' }
   );
   return error ? false : true;
 }

@@ -93,7 +93,7 @@ export async function loadCart(userId: string | null): Promise<StoredCart> {
     .eq('user_id', userId)
     .maybeSingle();
 
-  if (error) throw error;
+  if (error) return EMPTY_CART;
 
   const remoteItems = ((data?.items as CartMap) || {}) as CartMap;
   const remoteHasItems = Object.values(remoteItems).some((q) => Number(q) > 0);

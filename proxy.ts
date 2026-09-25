@@ -111,11 +111,9 @@ export async function proxy(request: NextRequest) {
       },
     });
 
-    // getClaims() valida el JWT localmente (sin viaje a Supabase Auth) y
-    // refresca la sesión si el token venció. getUser() era un round-trip de
-    // red en cada navegación.
-    const { data: claimsData } = await supabase.auth.getClaims();
-    const user = claimsData?.claims ?? null;
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
 
     // Si ya está logueado y entra a /login, lo mandamos al catálogo en vez de
     // mostrarle el formulario de nuevo.
@@ -140,17 +138,11 @@ export const config = {
     // corre en todo menos assets estáticos, archivos de Next y los archivos de
     // la PWA.
     //
-    // /api/ también queda afuera: esas rutas no renderizan HTML (no
-    // necesitan CSP con nonce) y las que necesitan sesión (push, cuenta,
-    // admin) validan al usuario ellas mismas. Antes cada llamada a la API
-    // pagaba una verificación de sesión extra, y una sola carga de la
-    // vidriera dispara decenas de /api/productos.
-    //
     // robots.txt y sitemap.xml también quedan afuera: son archivos para
     // crawlers, que no tienen sesión. Si el middleware corriera ahí haría una
     // llamada a Supabase al vacío por cada pedido de un bot y podría
     // devolverlos con Set-Cookie, lo que le dice al CDN que la respuesta es
     // privada y arruina el caché de dos archivos que son iguales para todos.
-    '/((?!api/|_next/static|_next/image|favicon.ico|manifest.json|sw.js|robots.txt|sitemap.xml|icons/|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    '/((?!_next/static|_next/image|favicon.ico|manifest.json|sw.js|robots.txt|sitemap.xml|icons/|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 };

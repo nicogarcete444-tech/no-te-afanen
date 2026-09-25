@@ -28,7 +28,7 @@ export default function TerminosPage() {
           <strong>No Te Afanen</strong> es operada por:
         </p>
         <ul>
-          <li>Titular: Nicolás Garcete</li>
+          <li>Titular: Nicolás Garcete — DNI 50.130.773 — CUIL 20-50130773-5</li>
           <li>Domicilio: Calle 171 N.º 1702, Bernal, Quilmes, Provincia de Buenos Aires, Argentina</li>
           <li>Email de contacto: nicogarcete444@gmail.com</li>
         </ul>

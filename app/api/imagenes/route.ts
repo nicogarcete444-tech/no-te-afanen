@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { isRateLimited, RATE_LIMITS } from '@/lib/apiSecurity';
+import { getClientIp, isRateLimited, RATE_LIMITS } from '@/lib/apiSecurity';
 import { fetchWithTimeout } from '@/lib/fetchWithTimeout';
-import { SITE_URL } from '@/lib/siteUrl';
 
 // Con hasta MAX_EANS productos por pedido y (antes) hasta 4 llamadas
 // secuenciales por producto, esta ruta podía tardar bastante; le damos
@@ -73,17 +72,6 @@ const VTEX_STORES_2 = [
   'www.hiperlibertad.com.ar',
 ];
 
-// Interruptor por si una tienda o MercadoLibre reclama, o te empiezan a
-// bloquear: IMAGE_STORE_LOOKUP=0 deja SOLO las bases abiertas (Open * Facts) y
-// apaga las consultas a tiendas VTEX y MercadoLibre sin tocar código.
-const STORE_LOOKUP_ENABLED = process.env.IMAGE_STORE_LOOKUP !== '0';
-
-// MAX_EANS tiene que ser >= el MAX_PER_REQUEST con el que el navegador arma
-// cada pedido (ver lib/productImage.ts): si el navegador junta 60 códigos en
-// un solo pedido y acá se cortaba en 20, los 40 restantes ni se llegaban a
-// consultar y quedaban sin foto directamente (no es que ninguna fuente la
-// tuviera: nunca se les preguntó). El tope real de trabajo por pedido lo
-// ponen TOTAL_BUDGET_MS y MAX_CONCURRENT_CALLS más abajo, no este número.
 const MAX_EANS = 60;
 const CACHE_SECONDS = 60 * 60 * 24 * 30; // foto encontrada: un mes
 const MISS_CACHE_SECONDS = 60 * 60 * 24; // "ninguna fuente la tiene": un día
@@ -94,17 +82,18 @@ const PROVIDER_REVALIDATE = 60 * 60 * 24 * 3;
 // Tiempo máximo total del pedido (la función corta a los 25s).
 const TOTAL_BUDGET_MS = 20_000;
 const PER_CALL_TIMEOUT_MS = 4_000;
+const MAX_CONCURRENT_CALLS = 40;
 
 // Open Food Facts pide identificarse. Sin esto, los pedidos anónimos entran
 // en la cola lenta o directamente se rechazan.
 const OFF_HEADERS = {
-  'User-Agent': `NoTeAfanen/1.0 (comparador de precios; ${SITE_URL})`,
+  'User-Agent': 'NoTeAfanen/1.0 (comparador de precios; https://github.com/no-te-afanen)',
   Accept: 'application/json',
 };
 
 // MercadoLibre y las tiendas también piden un User-Agent propio.
 const ML_HEADERS = {
-  'User-Agent': `NoTeAfanen/1.0 (comparador de precios; ${SITE_URL})`,
+  'User-Agent': 'NoTeAfanen/1.0 (comparador de precios)',
   Accept: 'application/json',
 };
 
@@ -117,19 +106,8 @@ type Probe = { status: 'hit'; url: string } | { status: 'miss' } | { status: 'er
 const MISS: Probe = { status: 'miss' };
 const ERROR: Probe = { status: 'error' };
 
-// Límite de pedidos salientes simultáneos CONTRA UNA MISMA FUENTE: si a la
-// vez hay 60 productos pidiendo foto, no queremos mandarle 60 pedidos juntos
-// a openfoodfacts.org (empieza a rechazar con 429). Antes este límite era
-// UNO SOLO compartido entre TODAS las fuentes (12 en total en todo el
-// pedido): si en un momento dado la mayoría de las conexiones activas eran
-// contra una sola fuente lenta, las demás fuentes se quedaban esperando su
-// turno sin necesidad, y esa espera de más es justamente lo que hacía que el
-// presupuesto de tiempo (TOTAL_BUDGET_MS) se gastara antes de llegar a
-// consultar a todos los productos. Con un limitador POR FUENTE, cada una
-// tiene su propio cupo de conexiones y no se pisan entre sí: se hacen más
-// pedidos en paralelo sin mandarle más carga de la debida a ninguna fuente
-// en particular.
-const PER_SOURCE_CONCURRENCY = 8;
+// Límite de pedidos salientes simultáneos: 60 productos x 4-9 fuentes serían
+// cientos de pedidos a la vez y las fuentes empiezan a rechazar (429).
 function createLimiter(max: number) {
   let active = 0;
   const waiting: (() => void)[] = [];
@@ -143,16 +121,6 @@ function createLimiter(max: number) {
       waiting.shift()?.();
     }
   };
-}
-
-const sourceLimiters = new Map<string, ReturnType<typeof createLimiter>>();
-function limiterFor(source: string): ReturnType<typeof createLimiter> {
-  let l = sourceLimiters.get(source);
-  if (!l) {
-    l = createLimiter(PER_SOURCE_CONCURRENCY);
-    sourceLimiters.set(source, l);
-  }
-  return l;
 }
 
 // Cuánto tiempo le queda a este pedido para una llamada más (0 = ya no).
@@ -304,19 +272,13 @@ async function probeVtex(host: string, ean: string, deadline: number): Promise<P
   }
 }
 
-// Consulta un grupo de fuentes en paralelo y devuelve TODAS las que tienen
-// foto, en el orden de la lista (no en el orden en que respondan) y sin
-// duplicados. Como las fuentes de ese nivel ya se consultaron en paralelo
-// para elegir "la" foto, quedarse también con las demás no cuesta ningún
-// pedido extra: sirven de respaldo si la primera imagen rompe en el
-// navegador (link caído, hotlinking bloqueado) sin tener que volver a
-// preguntarle a nadie.
-function allHits(probes: Probe[]): string[] {
-  const urls: string[] = [];
-  for (const p of probes) {
-    if (p.status === 'hit' && isAllowedImageHost(p.url) && !urls.includes(p.url)) urls.push(p.url);
-  }
-  return urls;
+// Consulta un grupo de fuentes en paralelo y devuelve la primera con foto,
+// en el orden de la lista (no en el orden en que respondan).
+function firstHit(probes: Probe[]): string | null {
+  const hit = probes.find(
+    (p): p is { status: 'hit'; url: string } => p.status === 'hit' && isAllowedImageHost(p.url)
+  );
+  return hit ? hit.url : null;
 }
 
 // Solo se devuelven fotos de dominios que la CSP de la app deja cargar (ver
@@ -342,60 +304,54 @@ function isAllowedImageHost(url: string): boolean {
   }
 }
 
-// Fotos de UN producto, pasando por los niveles en orden. `complete` es false
+// Foto de UN producto, pasando por los niveles en orden. `complete` es false
 // si ninguna fuente tuvo foto Y alguna falló (no se puede afirmar "sin foto").
-// `urls` viene ordenada por prioridad: la primera es la que se muestra, las
-// siguientes son respaldo para el navegador si esa falla al cargar. Una vez
-// que un nivel tiene algo, ahí se corta: los niveles siguientes NO se
-// consultan (ni para elegir foto ni para juntar respaldos), así se mantiene
-// la misma cantidad de pedidos que antes.
-async function resolveOne(ean: string, name: string | undefined, deadline: number): Promise<{ urls: string[]; complete: boolean }> {
+async function resolveOne(
+  ean: string,
+  name: string | undefined,
+  deadline: number,
+  limit: <T>(fn: () => Promise<T>) => Promise<T>
+): Promise<{ url: string | null; complete: boolean }> {
   let failed = false;
 
-  // Nivel 1: bases abiertas, en paralelo (cada una cubre un rubro, cada una
-  // con su propio cupo de conexiones vía limiterFor).
-  const l1 = await Promise.all(OFF_DOMAINS.map((d) => limiterFor(d)(() => probeOpenFacts(d, ean, deadline))));
-  const h1 = allHits(l1);
-  if (h1.length) return { urls: h1, complete: true };
+  // Nivel 1: bases abiertas, en paralelo (cada una cubre un rubro).
+  const l1 = await Promise.all(OFF_DOMAINS.map((d) => limit(() => probeOpenFacts(d, ean, deadline))));
+  const u1 = firstHit(l1);
+  if (u1) return { url: u1, complete: true };
   if (l1.some((p) => p.status === 'error')) failed = true;
-
-  if (!STORE_LOOKUP_ENABLED) return { urls: [], complete: !failed };
 
   // Nivel 2: las 4 tiendas grandes por código de barras exacto. Solo si el
   // nivel 1 no tuvo.
-  const l2 = await Promise.all(VTEX_STORES.map((h) => limiterFor(h)(() => probeVtex(h, ean, deadline))));
-  const h2 = allHits(l2);
-  if (h2.length) return { urls: h2, complete: true };
+  const l2 = await Promise.all(VTEX_STORES.map((h) => limit(() => probeVtex(h, ean, deadline))));
+  const u2 = firstHit(l2);
+  if (u2) return { url: u2, complete: true };
   if (l2.some((p) => p.status === 'error')) failed = true;
 
   // Nivel 2b: segundo grupo de tiendas. Solo si el primero no tuvo nada.
-  const l2b = await Promise.all(VTEX_STORES_2.map((h) => limiterFor(h)(() => probeVtex(h, ean, deadline))));
-  const h2b = allHits(l2b);
-  if (h2b.length) return { urls: h2b, complete: true };
+  const l2b = await Promise.all(VTEX_STORES_2.map((h) => limit(() => probeVtex(h, ean, deadline))));
+  const u2b = firstHit(l2b);
+  if (u2b) return { url: u2b, complete: true };
   if (l2b.some((p) => p.status === 'error')) failed = true;
 
-  // Nivel 3: MercadoLibre, validando el título. Último recurso (una sola
-  // fuente, así que no hay de dónde sacar un respaldo extra sin gastar otro
-  // pedido).
-  const l3 = await limiterFor('mercadolibre')(() => probeMercadoLibre(ean, name, deadline));
-  if (l3.status === 'hit' && isAllowedImageHost(l3.url)) return { urls: [l3.url], complete: true };
+  // Nivel 3: MercadoLibre, validando el título. Último recurso.
+  const l3 = await limit(() => probeMercadoLibre(ean, name, deadline));
+  if (l3.status === 'hit' && isAllowedImageHost(l3.url)) return { url: l3.url, complete: true };
   if (l3.status === 'error') failed = true;
 
-  return { urls: [], complete: !failed };
+  return { url: null, complete: !failed };
 }
 
 export async function GET(request: NextRequest) {
+  if (isRateLimited('imagenes:' + getClientIp(request), RATE_LIMITS.imagenes)) {
+    return NextResponse.json({ error: 'Demasiados pedidos. Esperá un momento.' }, { status: 429 });
+  }
+
   // eans y names viajan en paralelo (mismo índice = mismo producto). names
   // es opcional: cada nombre va con encodeURIComponent individual (así una
   // coma dentro de un nombre no rompe el separador), así que se decodifica
   // por segmento antes de usarlo.
-  const eansParam = request.nextUrl.searchParams.get('eans') || '';
-  const namesParam = request.nextUrl.searchParams.get('names') || '';
-  if (eansParam.length > 512 || namesParam.length > 10000) {
-    return NextResponse.json({ error: 'La consulta supera el tamaño permitido.' }, { status: 400 });
-  }
-  const rawEans = eansParam.split(',').map((e) => e.trim());
-  const rawNames = namesParam.split(',');
+  const rawEans = (request.nextUrl.searchParams.get('eans') || '').split(',').map((e) => e.trim());
+  const rawNames = (request.nextUrl.searchParams.get('names') || '').split(',');
 
   const nameByEan = new Map<string, string>();
   rawEans.forEach((ean, i) => {
@@ -403,7 +359,7 @@ export async function GET(request: NextRequest) {
     const raw = rawNames[i];
     if (!raw) return;
     try {
-      const decoded = decodeURIComponent(raw).trim().slice(0, 120);
+      const decoded = decodeURIComponent(raw).trim();
       if (decoded) nameByEan.set(ean, decoded);
     } catch {
       // nombre mal codificado: seguimos sin él, no es motivo para cortar todo
@@ -416,36 +372,24 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Falta el parámetro "eans".' }, { status: 400 });
   }
 
-  // El límite se mide en productos, no en requests: un pedido con MAX_EANS
-  // códigos dispara hasta MAX_PROBES_PER_REQUEST llamadas a terceros, así que
-  // pesa muchas veces más que uno con 1. Si falla el limitador compartido se
-  // deja pasar (es una lectura cacheable), pero el contador local sigue
-  // vigente.
-  if (await isRateLimited(request, 'imagenes', RATE_LIMITS.imagenes, { cost: eans.length, failMode: 'open' })) {
-    return NextResponse.json({ error: 'Demasiados pedidos. Esperá un momento.' }, { status: 429 });
-  }
-
   const deadline = Date.now() + TOTAL_BUDGET_MS;
+  const limit = createLimiter(MAX_CONCURRENT_CALLS);
 
   // Los productos van en paralelo entre sí; cada uno recorre sus niveles en
-  // orden, y cada llamada usa el limitador de SU fuente (limiterFor) en vez
-  // de un único cupo compartido por todo el pedido.
-  const results = await Promise.all(eans.map((ean) => resolveOne(ean, nameByEan.get(ean), deadline)));
+  // orden.
+  const results = await Promise.all(eans.map((ean) => resolveOne(ean, nameByEan.get(ean), deadline, limit)));
 
-  // imagenes[ean] es un array de URLs ordenadas por prioridad (puede tener
-  // más de una: ver el comentario de allHits/resolveOne). Array vacío =
-  // ninguna fuente la tiene confirmado.
-  const imagenes: Record<string, string[]> = {};
+  const imagenes: Record<string, string | null> = {};
   const pendientes: string[] = [];
   eans.forEach((ean, i) => {
-    imagenes[ean] = results[i].urls;
-    if (!results[i].urls.length && !results[i].complete) pendientes.push(ean);
+    imagenes[ean] = results[i].url;
+    if (!results[i].url && !results[i].complete) pendientes.push(ean);
   });
 
   // Caché según qué tan firme es la respuesta: todas con foto = un mes;
   // alguna "sin foto" confirmada = un día (alguien puede cargarla); alguna
   // fuente falló = un minuto (que se reintente enseguida).
-  const anyMiss = eans.some((e) => !imagenes[e].length);
+  const anyMiss = eans.some((e) => !imagenes[e]);
   const maxAge = pendientes.length ? PENDING_CACHE_SECONDS : anyMiss ? MISS_CACHE_SECONDS : CACHE_SECONDS;
 
   return NextResponse.json(

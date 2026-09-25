@@ -5,17 +5,28 @@ import { CATEGORY_COLORS } from '@/lib/categories';
 import { fmt } from '@/lib/format';
 import { cartStats, potentialSavings } from '@/lib/cartStats';
 import { CartMap, Product, lowestKnownPrice } from '@/lib/types';
-import { useCartItemPhoto } from '@/lib/productImage';
+import { eanFromCartId, getProductImageUrl, getProductImageUrlByName } from '@/lib/productImage';
 import { StoredCart } from '@/lib/cart';
 import { CartTemplate, deleteTemplate, listTemplates, saveTemplate } from '@/lib/cartTemplates';
 import { buildShareUrl } from '@/lib/sharedCart';
 
 function CartItemPhoto({ id, name, ca, cb }: { id: string; name: string; ca: string; cb: string }) {
-  // Si el id ya trae el EAN real (productos agregados desde la búsqueda en
-  // vivo), useCartItemPhoto lo usa directo; si no, resuelve por nombre. Si
-  // la foto elegida rompe al cargar, prueba sola la siguiente fuente antes
-  // de rendirse al respaldo de color.
-  const { url, onImageError } = useCartItemPhoto(id, name);
+  const [url, setUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    // Si el id ya trae el EAN real (productos agregados desde la búsqueda en
+    // vivo), lo usamos directo: es más confiable que volver a adivinar el
+    // producto a partir del nombre.
+    const ean = eanFromCartId(id);
+    const lookup = ean ? getProductImageUrl(ean, name) : getProductImageUrlByName(name);
+    lookup.then((found) => {
+      if (!cancelled) setUrl(found);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [id, name]);
 
   if (url) {
     return (
@@ -28,7 +39,7 @@ function CartItemPhoto({ id, name, ca, cb }: { id: string; name: string; ca: str
           loading="lazy"
           decoding="async"
           style={{ width: '100%', height: '100%', objectFit: 'contain' }}
-          onError={onImageError}
+          onError={() => setUrl(null)}
         />
       </div>
     );
@@ -203,7 +214,7 @@ function CartShareButton({
   }
 
   return (
-    <button className="cart-sheet-share-btn" onClick={handleShare} title="El enlace permite ver los productos y cantidades a quien lo tenga.">
+    <button className="cart-sheet-share-btn" onClick={handleShare}>
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
         <circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" />
         <path d="M8.6 10.5 15.4 6.5M8.6 13.5l6.8 4" />

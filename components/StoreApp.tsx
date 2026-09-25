@@ -86,47 +86,16 @@ function roughKm(a: { lat: number; lng: number }, b: { lat: number; lng: number 
 // getProductImageUrl los agrupe en la menor cantidad posible de pedidos a
 // /api/imagenes, y de paso queden en caché para cuando la tarjeta los vuelva
 // a pedir.
-// Antes esto esperaba a que /api/imagenes terminara de recorrer TODAS sus
-// fuentes (bases abiertas -> tiendas -> MercadoLibre, en cascada) para los
-// ~40 candidatos de la portada antes de mostrar un solo producto. Esa
-// cascada puede tardar hasta 20s cuando las fuentes de más atrás no
-// responden rápido, y la portada entera quedaba tapada por el cartel de
-// "Consultando precios oficiales..." todo ese tiempo — el grueso de los ~10s
-// de carga que se sentían no era Precios Claros, era esto.
-//
-// Cada ProductCard ya resuelve su propia foto de forma progresiva al
-// montarse (ver getProductImageUrl en lib/productImage.ts), con su propio
-// estado de "buscando". No hace falta bloquear la portada para elegir el
-// candidato con foto: la elegimos con un tiempo tope corto y, si no llegó a
-// tiempo, mostramos el primer candidato tal cual — su foto (si alguna fuente
-// la tiene) va a aparecer sola un instante después, exactamente como pasa en
-// cualquier otro rubro o búsqueda.
-const HOME_TEASER_PHOTO_BUDGET_MS = 1200;
-
-function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> {
-  return new Promise((resolve) => {
-    const timer = setTimeout(() => resolve(fallback), ms);
-    promise.then((v) => {
-      clearTimeout(timer);
-      resolve(v);
-    });
-  });
-}
-
 async function pickHomeTeaserWithPhotos(slots: LiveItem[][]): Promise<LiveItem[]> {
   const perSlot = await Promise.all(
     slots.map(async (candidates) => {
       if (!candidates.length) return null;
-      const withPhoto = await withTimeout(
-        Promise.all(
-          candidates.map(async (item) => {
-            const ean = extractEan(item);
-            const url = ean ? await getProductImageUrl(ean, photoLookupName(item)) : null;
-            return { item, hasPhoto: !!url };
-          })
-        ),
-        HOME_TEASER_PHOTO_BUDGET_MS,
-        candidates.map((item) => ({ item, hasPhoto: false }))
+      const withPhoto = await Promise.all(
+        candidates.map(async (item) => {
+          const ean = extractEan(item);
+          const url = ean ? await getProductImageUrl(ean, photoLookupName(item)) : null;
+          return { item, hasPhoto: !!url };
+        })
       );
       const found = withPhoto.find((c) => c.hasPhoto);
       return (found ?? withPhoto[0]).item;
@@ -260,7 +229,6 @@ export default function StoreApp({
   // primer pintado, y el efecto de abajo sincroniza este estado con eso.
   const [theme, setTheme] = useState<Theme>('light');
   const [cartLoaded, setCartLoaded] = useState(false);
-  const [cartCanSave, setCartCanSave] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [syncError, setSyncError] = useState(false);
   const [scrolled, setScrolled] = useState(false);
@@ -463,11 +431,11 @@ export default function StoreApp({
         if (cancelled) return;
         setSelected(stored.items);
         setLiveProducts(stored.liveProducts);
-        setCartCanSave(true);
       })
       .catch(() => {
-        // No reemplazar ni guardar un carrito vacío si la lectura remota falló.
-        if (!cancelled) setSyncError(true);
+        // Si Supabase no responde (red caída, sesión vencida, lo que sea),
+        // no dejamos a la persona mirando "Cargando tu carrito..." para
+        // siempre: arrancamos con el carrito vacío en vez de trabarnos.
       })
       .finally(() => {
         if (!cancelled) setCartLoaded(true);
@@ -482,28 +450,6 @@ export default function StoreApp({
     await supabase.auth.signOut();
     // ya no lo mandamos a /login: se queda navegando como invitado.
     router.refresh();
-  }
-
-  // Baja de cuenta (derecho de supresión, Ley 25.326). Doble confirmación
-  // porque es irreversible: borra carrito, ahorros, alertas y Premium.
-  async function handleDeleteAccount() {
-    const ok = window.confirm(
-      'Vas a eliminar tu cuenta y todos tus datos (carrito, ahorros, alertas y Premium). Esto no se puede deshacer. ¿Seguir?'
-    );
-    if (!ok) return;
-    try {
-      const res = await fetch('/api/account/delete', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ confirm: 'ELIMINAR' }),
-      });
-      if (!res.ok) throw new Error(String(res.status));
-      await createClient().auth.signOut().catch(() => {});
-      window.alert('Tu cuenta fue eliminada.');
-      router.refresh();
-    } catch {
-      window.alert('No pudimos eliminar la cuenta. Probá de nuevo o escribinos.');
-    }
   }
 
   // Toma el tema que el script de arranque ya dejó puesto (elección
@@ -609,14 +555,8 @@ export default function StoreApp({
     }
     const { lat, lng } = coords;
     let cancelled = false;
+    const BATCH_SIZE = 6;
     const isHome = activeCategory === 'Todos';
-    // El límite de a 6 es para no bombardear Precios Claros cuando se elige
-    // un rubro (esas tandas pueden tener decenas de términos). La portada
-    // siempre tiene un puñado fijo (HOME_TEASER_QUERIES, hoy 10): partirla en
-    // dos rondas secuenciales de 6+4 le agregaba una vuelta completa de ida y
-    // vuelta de más (la portada esperaba a la más lenta de la primera tanda
-    // ANTES de siquiera pedir la segunda). Todas juntas en una sola tanda.
-    const BATCH_SIZE = isHome ? HOME_TEASER_QUERIES.length : 6;
     const resultsPerQuery = isHome ? HOME_TEASER_RESULTS_PER_QUERY : CATALOG_RESULTS_PER_QUERY;
     const isFirstPage = catalogPage === 0;
 
@@ -747,7 +687,7 @@ export default function StoreApp({
   // corre hasta que terminó de cargar el carrito inicial, para no pisar lo
   // que ya estaba guardado con un carrito vacío apenas monta el componente.
   useEffect(() => {
-    if (!cartLoaded || !cartCanSave) return;
+    if (!cartLoaded) return;
     if (saveDebounce.current) clearTimeout(saveDebounce.current);
     saveDebounce.current = setTimeout(async () => {
       setSyncing(true);
@@ -766,7 +706,7 @@ export default function StoreApp({
     return () => {
       if (saveDebounce.current) clearTimeout(saveDebounce.current);
     };
-  }, [selected, liveProducts, cartLoaded, cartCanSave, userId]);
+  }, [selected, liveProducts, cartLoaded, userId]);
 
   // búsqueda en vivo contra Precios Claros (vía nuestro proxy /api/productos)
   useEffect(() => {
@@ -1462,7 +1402,6 @@ export default function StoreApp({
               {Object.keys(sharedCartOffer.items).length} producto
               {Object.keys(sharedCartOffer.items).length === 1 ? '' : 's'} · se suman al tuyo, no lo reemplazan
             </span>
-            <span>El enlace permite ver los productos y cantidades a quien lo tenga.</span>
           </div>
           <div className="shared-cart-banner-actions">
             <button className="shared-cart-banner-accept" onClick={handleAcceptSharedCart}>Sumar al carrito</button>
@@ -1486,7 +1425,6 @@ export default function StoreApp({
           userEmail={userEmail}
           isAdmin={isAdmin}
           onLogout={handleLogout}
-          onDeleteAccount={handleDeleteAccount}
           onOpenSavingsHistory={() => {
             setCartOpen(false);
             setSavingsHistoryOpen(true);
@@ -1515,7 +1453,7 @@ export default function StoreApp({
         )}
 
         {syncError ? (
-          <div className="sync-note">{cartCanSave ? 'No se pudo guardar el carrito ahora — vamos a reintentar solo.' : 'No se pudo cargar el carrito. Para proteger tus datos no guardaremos cambios; recargá la página para reintentar.'}</div>
+          <div className="sync-note">No se pudo guardar el carrito ahora — vamos a reintentar solo.</div>
         ) : syncing ? (
           <div className="sync-note">Guardando carrito...</div>
         ) : null}

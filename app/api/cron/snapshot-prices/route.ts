@@ -34,23 +34,5 @@ export async function GET(request: NextRequest) {
   }
 
   const result = await runPriceSnapshotBatch();
-
-  // Antes devolvía siempre 200 aunque fallara todo, así que Vercel mostraba
-  // la corrida como exitosa. Ahora una corrida con errores devuelve 500 y
-  // queda marcada en los logs/alertas de Vercel.
-  const failed = result.errors.length > 0 && (result.processed === 0 || result.errors.length >= result.processed / 2);
-  if (result.errors.length) console.error('[cron/snapshot-prices]', JSON.stringify(result));
-
-  // Webhook opcional (Slack/Discord/etc.) para enterarte sin mirar los logs.
-  const hook = process.env.ALERT_WEBHOOK_URL;
-  if (failed && hook) {
-    await fetch(hook, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text: `No Te Afanen: el cron de precios falló. ${result.errors.slice(0, 3).join(' | ')}` }),
-      signal: AbortSignal.timeout(4000),
-    }).catch(() => {});
-  }
-
-  return NextResponse.json(result, { status: failed ? 500 : 200 });
+  return NextResponse.json(result);
 }

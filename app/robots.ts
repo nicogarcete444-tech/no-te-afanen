@@ -29,9 +29,6 @@ export default function robots(): MetadataRoute.Robots {
           // Formulario de login/alta: no aporta nada indexado y evita que
           // Google lo muestre como puerta de entrada al sitio.
           '/login',
-          // Solo tiene sentido con el link de recuperación de contraseña en
-          // la URL; sin eso redirige a /login igual.
-          '/actualizar-contrasena',
         ],
       },
     ],

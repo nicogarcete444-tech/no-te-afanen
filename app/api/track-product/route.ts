@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { isRateLimited, isValidProductId, sanitizeQuery } from '@/lib/apiSecurity';
-import { readJsonBody } from '@/lib/readJsonBody';
-import { eanExistsInPreciosClaros } from '@/lib/referenceStores';
+import { getClientIp, isRateLimited, isValidProductId, sanitizeQuery } from '@/lib/apiSecurity';
 
 // Escribe con la service_role key, no con la anon key.
 //
@@ -14,14 +12,15 @@ import { eanExistsInPreciosClaros } from '@/lib/referenceStores';
 // acá — y por el isRateLimited de más abajo.
 
 export async function POST(request: NextRequest) {
-  if (await isRateLimited(request, 'track-product')) {
+  if (isRateLimited('track-product:' + getClientIp(request))) {
     return NextResponse.json({ error: 'Demasiados pedidos. Esperá un momento.' }, { status: 429 });
   }
 
-  const body = await readJsonBody<{ ean?: unknown; nombre?: unknown }>(request, 4096);
-  if (!body) {
-    const tooLarge = Number(request.headers.get('content-length')) > 4096;
-    return NextResponse.json({ error: tooLarge ? 'Body demasiado grande.' : 'Body inválido.' }, { status: tooLarge ? 413 : 400 });
+  let body: any;
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: 'Body inválido.' }, { status: 400 });
   }
 
   const ean = typeof body?.ean === 'string' ? body.ean : null;
@@ -39,22 +38,13 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ tracked: false });
   }
 
-  // Un EAN que ya está en la cola se actualiza sin más. Uno nuevo se valida
-  // contra Precios Claros antes de ocupar un cupo: el regex solo mira la forma
-  // (4–20 dígitos), no que el producto exista.
-  const { data: already } = await admin.from('tracked_products').select('ean').eq('ean', ean).maybeSingle();
-  if (!already && !(await eanExistsInPreciosClaros(ean))) {
-    return NextResponse.json({ tracked: false });
-  }
-
-  const { data: tracked, error } = await admin.rpc('track_product_limited', {
-    p_ean: ean,
-    p_nombre: nombre,
-  });
+  const { error } = await admin
+    .from('tracked_products')
+    .upsert({ ean, nombre, last_seen_at: new Date().toISOString() }, { onConflict: 'ean' });
 
   if (error) {
     console.error('[track-product]', error.message);
     return NextResponse.json({ error: 'No se pudo registrar el producto.' }, { status: 500 });
   }
-  return NextResponse.json({ tracked: tracked === true });
+  return NextResponse.json({ tracked: true });
 }
