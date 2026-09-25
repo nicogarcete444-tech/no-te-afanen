@@ -9,7 +9,7 @@ export async function POST(request: NextRequest) {
   // Esta ruta escribe en la base. Sin tope, alguien con una sesión válida
   // (o un script con una cuenta descartable) podía llenar push_subscriptions
   // a fuerza de endpoints inventados.
-  if (isRateLimited('push-sub:' + getClientIp(request), 20)) {
+  if (await isRateLimited('push-sub:' + getClientIp(request), 20)) {
     return NextResponse.json({ error: 'Demasiados pedidos. Esperá un momento.' }, { status: 429 });
   }
 

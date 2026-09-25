@@ -12,7 +12,7 @@ import { getClientIp, isRateLimited, isValidProductId, sanitizeQuery } from '@/l
 // acá — y por el isRateLimited de más abajo.
 
 export async function POST(request: NextRequest) {
-  if (isRateLimited('track-product:' + getClientIp(request))) {
+  if (await isRateLimited('track-product:' + getClientIp(request))) {
     return NextResponse.json({ error: 'Demasiados pedidos. Esperá un momento.' }, { status: 429 });
   }
 

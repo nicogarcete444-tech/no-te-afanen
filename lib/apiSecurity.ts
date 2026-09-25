@@ -1,3 +1,6 @@
+import { Ratelimit } from '@upstash/ratelimit';
+import { Redis } from '@upstash/redis';
+
 // Utilidades compartidas por las rutas de /app/api/* para no repetir la
 // misma validación/rate-limit en cada endpoint.
 //
@@ -15,12 +18,6 @@ const WINDOW_MS = 60_000;
 // registrar un producto, etc.).
 const MAX_REQUESTS_PER_WINDOW = 30;
 
-// Ojo con bajar estos números: una sola carga de la vidriera dispara una
-// búsqueda por cada término del rubro (ver CATALOG_QUERIES_PER_PAGE), y la
-// ficha de un producto pide el precio en varias sucursales. Con el tope
-// viejo de 30 para todo, la app se bloqueaba a sí misma con 429 apenas
-// cambiabas de rubro dos veces seguidas — el usuario veía "Demasiadas
-// búsquedas" sin haber hecho nada raro.
 export const RATE_LIMITS = {
   productos: 120,
   producto: 120,
@@ -29,32 +26,73 @@ export const RATE_LIMITS = {
   imagenes: 60,
 } as const;
 
-const hits = new Map<string, number[]>();
+// Límite GLOBAL con Upstash Redis (compartido entre todas las instancias
+// serverless). Si faltan las env vars, cae a memoria local por instancia.
+const redis =
+  process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
+    ? new Redis({
+        url: process.env.UPSTASH_REDIS_REST_URL,
+        token: process.env.UPSTASH_REDIS_REST_TOKEN,
+      })
+    : null;
 
-// Evita que el Map crezca sin límite si entran muchas IPs distintas.
-function cleanup(now: number) {
-  if (hits.size < 5000) return;
-  for (const [key, timestamps] of hits) {
-    const fresh = timestamps.filter((t) => now - t < WINDOW_MS);
-    if (fresh.length) hits.set(key, fresh);
-    else hits.delete(key);
+const limiters = new Map<number, Ratelimit>();
+
+function getLimiter(max: number): Ratelimit | null {
+  if (!redis) return null;
+  let l = limiters.get(max);
+  if (!l) {
+    l = new Ratelimit({
+      redis,
+      limiter: Ratelimit.slidingWindow(max, '60 s'),
+      prefix: 'nta:rl',
+    });
+    limiters.set(max, l);
   }
+  return l;
 }
 
+const hits = new Map<string, number[]>();
+
+function localIsLimited(key: string, max: number): boolean {
+  const now = Date.now();
+  const timestamps = (hits.get(key) || []).filter((t) => now - t < WINDOW_MS);
+  timestamps.push(now);
+  hits.set(key, timestamps);
+  if (hits.size > 5000) {
+    for (const [k, ts] of hits) {
+      if (!ts.some((t) => now - t < WINDOW_MS)) hits.delete(k);
+    }
+  }
+  return timestamps.length > max;
+}
+
+// Ojo: el PRIMER valor de x-forwarded-for lo puede mandar el cliente (se
+// puede falsear). La plataforma agrega la IP real AL FINAL de la lista,
+// así que se toma el último valor.
 export function getClientIp(request: Request): string {
   const fwd = request.headers.get('x-forwarded-for');
-  if (fwd) return fwd.split(',')[0].trim();
+  if (fwd) {
+    const parts = fwd.split(',').map((p) => p.trim()).filter(Boolean);
+    if (parts.length) return parts[parts.length - 1];
+  }
   return request.headers.get('x-real-ip') || 'unknown';
 }
 
 // Devuelve true si YA se pasó del límite (o sea: hay que cortar la request).
-export function isRateLimited(key: string, max: number = MAX_REQUESTS_PER_WINDOW): boolean {
-  const now = Date.now();
-  cleanup(now);
-  const timestamps = (hits.get(key) || []).filter((t) => now - t < WINDOW_MS);
-  timestamps.push(now);
-  hits.set(key, timestamps);
-  return timestamps.length > max;
+export async function isRateLimited(
+  key: string,
+  max: number = MAX_REQUESTS_PER_WINDOW
+): Promise<boolean> {
+  const limiter = getLimiter(max);
+  if (!limiter) return localIsLimited(key, max);
+  try {
+    const { success } = await limiter.limit(key);
+    return !success;
+  } catch {
+    // Si Redis falla, no bloqueamos a los usuarios: usamos memoria local.
+    return localIsLimited(key, max);
+  }
 }
 
 // --- Validación de parámetros que llegan de la URL (siempre son texto) ---

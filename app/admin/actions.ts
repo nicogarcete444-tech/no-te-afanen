@@ -15,7 +15,7 @@ async function requireAdmin() {
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!isAdminEmail(user?.email)) {
+  if (!isAdminEmail(user?.email) || !user?.email_confirmed_at) {
     throw new Error('No autorizado');
   }
   const admin = createAdminClient();

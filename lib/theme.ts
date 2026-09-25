@@ -37,15 +37,6 @@ export function readStoredTheme(): Theme | null {
   }
 }
 
-// Ya no se usa la preferencia del sistema operativo para elegir el tema
-// inicial: el default es siempre claro. Queda la función por si en algún
-// lado todavía hace falta saber qué prefiere el sistema (por ejemplo, para
-// mostrar un aviso), pero resolveInitialTheme ya no la llama.
-export function systemTheme(): Theme {
-  if (typeof window === 'undefined' || !window.matchMedia) return 'light';
-  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-}
-
 export function resolveInitialTheme(): Theme {
   return readStoredTheme() ?? 'light';
 }

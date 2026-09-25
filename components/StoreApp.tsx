@@ -1664,7 +1664,7 @@ export default function StoreApp({
 
       </div>
 
-      <Footer />
+      <Footer withBottomNavSpace />
 
       <CartSheet
         open={cartOpen}

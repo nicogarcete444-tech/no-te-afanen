@@ -10,7 +10,7 @@ import { getClientIp, isRateLimited } from '@/lib/apiSecurity';
 // contra auth.users en supabase/schema.sql, así que se van solas con esta
 // única llamada — no hace falta borrar tabla por tabla acá.
 export async function POST(request: NextRequest) {
-  if (isRateLimited('account-delete:' + getClientIp(request), 5)) {
+  if (await isRateLimited('account-delete:' + getClientIp(request), 5)) {
     return NextResponse.json({ error: 'Demasiados intentos. Esperá un momento.' }, { status: 429 });
   }
 

@@ -3,7 +3,7 @@
 import { useMemo, useRef, useState } from 'react';
 import { fmt } from '@/lib/format';
 import { bestPerProduct, cartStats, ChosenEntry, estimatedStoreTotals, globalStoreIndex, potentialSavings, potentialSavingsByCategory } from '@/lib/cartStats';
-import { CartMap, Product, lowestKnownPrice } from '@/lib/types';
+import { CartMap, Product } from '@/lib/types';
 import { addSaving } from '@/lib/savingsHistory';
 import { LiveItem } from '@/lib/liveItems';
 import { NearbyStore } from '@/lib/storePrices';

@@ -62,7 +62,7 @@ async function lookupInDomain(domain: string, ean: string): Promise<string | nul
 }
 
 export async function GET(request: NextRequest) {
-  if (isRateLimited('nombre-producto:' + getClientIp(request))) {
+  if (await isRateLimited('nombre-producto:' + getClientIp(request))) {
     return NextResponse.json({ error: 'Demasiados pedidos. Esperá un momento.' }, { status: 429 });
   }
 

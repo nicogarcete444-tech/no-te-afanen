@@ -910,6 +910,9 @@
 .auth-error svg{flex-shrink:0;margin-top:1px;}
 .auth-switch{font-size:13px;color:var(--ink-soft);margin-top:20px;text-align:center;}
 .auth-switch button{background:none;border:none;color:var(--purple-2);font-weight:700;cursor:pointer;padding:0;font-size:13px;}
+.auth-forgot-row{text-align:right;margin:-6px 0 16px;}
+.auth-forgot-link{background:none;border:none;color:var(--ink-soft);font-size:12.5px;cursor:pointer;padding:0;font-family:var(--font-inter),sans-serif;}
+.auth-forgot-link:hover{color:var(--purple-2);text-decoration:underline;}
 
 /* botón principal en violeta sólo en el login/registro: es la única
    pantalla de la app donde el acento se usa así de fuerte, a tono con la
@@ -1265,7 +1268,12 @@
 
 /* --- footer --- */
 .site-footer{
-  margin-top:48px;padding:36px 20px calc(100px + env(safe-area-inset-bottom));background:#211A3D;
+  margin-top:48px;padding:36px 20px calc(24px + env(safe-area-inset-bottom));background:#211A3D;
+}
+/* Solo la portada (con BottomNav fijo superpuesto) necesita este colchón
+   extra abajo para que la barra no tape el texto del footer. */
+.site-footer--with-nav-space{
+  padding-bottom:calc(100px + env(safe-area-inset-bottom));
 }
 .footer-inner{max-width:520px;margin:0 auto;}
 .footer-brand{display:flex;flex-direction:column;gap:6px;padding-bottom:22px;margin-bottom:22px;border-bottom:1px solid #372F5C;}

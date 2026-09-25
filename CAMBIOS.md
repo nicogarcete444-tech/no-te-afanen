@@ -1,3 +1,22 @@
+# Cambios de esta tanda (recuperar contraseña, páginas de error, .env.example)
+
+- **"¿Olvidaste tu contraseña?" en `/login`** (`app/login/page.tsx`): antes
+  no existía ningún camino de vuelta si alguien se olvidaba la contraseña.
+  Ahora hay dos modos nuevos en la misma pantalla: `forgot` (pide el email
+  y llama a `supabase.auth.resetPasswordForEmail`) y `reset` (una vez que
+  el link del mail vuelve a `/auth/callback` y de ahí a `/login?reset=1`
+  con la sesión de recuperación ya puesta en cookies, pide la contraseña
+  nueva vía `supabase.auth.updateUser`). Reusa el mismo `/auth/callback`
+  que ya existía para confirmar el mail — no fue necesaria una ruta nueva.
+- **`app/not-found.tsx` y `app/error.tsx`**: no existían, así que un link
+  roto o un error no capturado mostraban la página genérica de Next en vez
+  del diseño de la app.
+- **`.env.example`**: el README instruye a copiarlo (`cp .env.example
+  .env.local`) pero el archivo no estaba en el repo. Ahora están las 13
+  variables que usa el código, con comentarios de dónde sacar cada una.
+
+---
+
 # Cambios de esta tanda (menos pedidos a Supabase)
 
 Esta vez el foco no fue el bundle sino la cantidad de idas y vueltas a

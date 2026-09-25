@@ -45,7 +45,7 @@ export default async function AdminPage() {
 
   // Mismo trato para "no logueado" y "logueado pero no admin": no hay que
   // darle pistas a nadie de que esta ruta existe o de por qué no entra.
-  if (!isAdminEmail(user?.email)) {
+  if (!isAdminEmail(user?.email) || !user?.email_confirmed_at) {
     redirect('/');
   }
 

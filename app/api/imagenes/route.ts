@@ -342,7 +342,7 @@ async function resolveOne(
 }
 
 export async function GET(request: NextRequest) {
-  if (isRateLimited('imagenes:' + getClientIp(request), RATE_LIMITS.imagenes)) {
+  if (await isRateLimited('imagenes:' + getClientIp(request), RATE_LIMITS.imagenes)) {
     return NextResponse.json({ error: 'Demasiados pedidos. Esperá un momento.' }, { status: 429 });
   }
 

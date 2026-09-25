@@ -12,7 +12,11 @@ desplegar en Vercel.
 - **Cuentas reales**: login y registro con email + contraseña vía Supabase Auth.
   El catálogo se puede navegar sin cuenta (modo invitado, con el carrito
   guardado solo en ese dispositivo); la cuenta sirve para que el carrito, el
-  ahorro y las alertas te sigan a cualquier celular.
+  ahorro y las alertas te sigan a cualquier celular. Desde "¿Olvidaste tu
+  contraseña?" en `/login` se puede pedir un link de recuperación
+  (`resetPasswordForEmail`); el link pasa por `/auth/callback` igual que la
+  confirmación de mail y vuelve a `/login?reset=1`, donde se pide la
+  contraseña nueva (`updateUser`).
 - **Carrito persistente por usuario**: cada carrito se guarda en una tabla de
   Postgres (`carts`) con Row Level Security, así que cada usuario solo puede leer
   y escribir el suyo. Se guarda con un pequeño debounce cada vez que cambiás
@@ -229,8 +233,6 @@ lista de compras guardada.
 
 ## Qué falta para ir más allá de esto
 
-- **Recuperar contraseña**: Supabase lo soporta out of the box
-  (`supabase.auth.resetPasswordForEmail`), no está cableado en el front todavía.
 - **Rate limiting compartido**: el que hay (`lib/apiSecurity.ts`) vive en la
   memoria de cada instancia serverless, así que no es un tope global real. Si
   el tráfico crece, conviene pasarlo a Upstash Ratelimit o al firewall de

@@ -1,8 +1,13 @@
 import Link from 'next/link';
 
-export default function Footer() {
+// `withBottomNavSpace` reserva espacio extra abajo (100px) para que la
+// barra de navegación fija no tape el texto — hace falta en la portada
+// (StoreApp), donde el BottomNav siempre está montado. Las páginas legales
+// no tienen BottomNav, así que con ese espacio de más el footer quedaba
+// con un bloque vacío grande al final de la pantalla sin ningún motivo.
+export default function Footer({ withBottomNavSpace = false }: { withBottomNavSpace?: boolean }) {
   return (
-    <footer className="site-footer">
+    <footer className={`site-footer${withBottomNavSpace ? ' site-footer--with-nav-space' : ''}`}>
       <div className="footer-inner">
         <div className="footer-brand">
           <span className="footer-brand-name">No Te Afanen</span>
