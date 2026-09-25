@@ -88,7 +88,12 @@ async function flush() {
 
   waiters.forEach((list, ean) => {
     const raw = imagenes[ean];
-    const urls = Array.isArray(raw) ? raw : [];
+    // Por si el navegador o el CDN todavía tienen guardada (hasta un mes,
+    // ver CACHE_SECONDS en el server) una respuesta VIEJA con una sola URL
+    // como texto en vez de un array: la tratamos igual como si trajera una
+    // sola candidata, en vez de descartarla como "sin foto". Así ninguna
+    // foto desaparece mientras esos caches viejos van venciendo solos.
+    const urls = Array.isArray(raw) ? raw : typeof raw === 'string' && raw ? [raw] : [];
     // Solo cacheamos si el server llegó a contestar algo sobre este código.
     if (Object.prototype.hasOwnProperty.call(imagenes, ean) && !pendientes.has(ean)) cache.set(ean, urls);
     list.forEach((w) => w.resolve(urls));
