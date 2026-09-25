@@ -8,7 +8,7 @@ export const maxDuration = 20;
 
 // Igual que /api/productos: corre en el servidor de Vercel para evitar CORS.
 export async function GET(request: NextRequest) {
-  if (await isRateLimited(request, 'sucursales', RATE_LIMITS.sucursales)) {
+  if (await isRateLimited(request, 'sucursales', RATE_LIMITS.sucursales, { failMode: 'open' })) {
     return NextResponse.json({ error: 'Demasiadas consultas. Esperá un momento.' }, { status: 429 });
   }
 

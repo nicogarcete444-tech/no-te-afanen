@@ -222,7 +222,7 @@ export default function PrivacidadPage() {
         </ul>
         <p>
           Para ejercer cualquiera de estos derechos, escribinos a nicogarcete444@gmail.com.
-          Para eliminar tu cuenta y los datos asociados, escribinos a ese correo.
+          Podés eliminar tu cuenta y los datos asociados en cualquier momento desde el menú de cuenta (&quot;Eliminar mi cuenta&quot;), o escribiéndonos a ese correo.
         </p>
         <p style={{ marginTop: 10 }}>
           <strong>

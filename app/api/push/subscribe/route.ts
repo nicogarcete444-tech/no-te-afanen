@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { isRateLimited } from '@/lib/apiSecurity';
+import { readJsonBody } from '@/lib/readJsonBody';
 
 // Guarda (o actualiza) la PushSubscription del usuario logueado. Requiere
 // sesión: las alertas push, igual que las de bajada de precio in-app, están
@@ -13,12 +14,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Demasiados pedidos. Esperá un momento.' }, { status: 429 });
   }
 
-  let body: any;
-  try {
-    body = await request.json();
-  } catch {
-    return NextResponse.json({ error: 'Body inválido.' }, { status: 400 });
-  }
+  const body = await readJsonBody<{ endpoint?: unknown; p256dh?: unknown; auth?: unknown }>(request, 4096);
+  if (!body) return NextResponse.json({ error: 'Body inválido o demasiado grande.' }, { status: 400 });
 
   const endpoint = typeof body?.endpoint === 'string' ? body.endpoint : null;
   const p256dh = typeof body?.p256dh === 'string' ? body.p256dh : null;
@@ -66,14 +63,15 @@ export async function POST(request: NextRequest) {
   return NextResponse.json({ subscribed: true });
 }
 
-// Dominios de los servicios de push de los navegadores. Si en el futuro
-// aparece uno nuevo (o un navegador cambia de host), hay que sumarlo acá o
-// las suscripciones de ese navegador se van a rechazar.
+// Servicios de push de los navegadores. Hosts exactos donde se puede (Chrome/
+// Edge/Android usan fcm.googleapis.com; con ".googleapis.com" a secas entraba
+// también cualquier bucket propio en storage.googleapis.com). Si aparece un
+// servicio nuevo, hay que sumarlo acá o esas suscripciones se rechazan.
+const PUSH_EXACT_HOSTS = ['fcm.googleapis.com', 'updates.push.services.mozilla.com'];
 const PUSH_HOST_SUFFIXES = [
   '.push.services.mozilla.com', // Firefox
-  '.googleapis.com',            // Chrome / Edge / Android (fcm.googleapis.com)
   '.notify.windows.com',        // Edge legacy / Windows
-  '.push.apple.com',            // Safari / iOS
+  '.push.apple.com',            // Safari / iOS (web.push.apple.com)
 ];
 
 function isAllowedPushEndpoint(endpoint: string): boolean {
@@ -85,8 +83,9 @@ function isAllowedPushEndpoint(endpoint: string): boolean {
     return false;
   }
   if (url.protocol !== 'https:') return false;
+  if (url.port && url.port !== '443') return false;
   const host = url.hostname.toLowerCase();
-  return PUSH_HOST_SUFFIXES.some((suffix) => host.endsWith(suffix));
+  return PUSH_EXACT_HOSTS.includes(host) || PUSH_HOST_SUFFIXES.some((suffix) => host.endsWith(suffix));
 }
 
 function isKeyLike(value: string, maxLen: number): boolean {

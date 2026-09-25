@@ -1,18 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { isRateLimited } from '@/lib/apiSecurity';
+import { readJsonBody } from '@/lib/readJsonBody';
 
 export async function POST(request: NextRequest) {
   if (await isRateLimited(request, 'push-unsub', 20)) {
     return NextResponse.json({ error: 'Demasiados pedidos. Esperá un momento.' }, { status: 429 });
   }
 
-  let body: any;
-  try {
-    body = await request.json();
-  } catch {
-    return NextResponse.json({ error: 'Body inválido.' }, { status: 400 });
-  }
+  const body = await readJsonBody<{ endpoint?: unknown }>(request, 2048);
+  if (!body) return NextResponse.json({ error: 'Body inválido o demasiado grande.' }, { status: 400 });
 
   const endpoint = typeof body?.endpoint === 'string' ? body.endpoint : null;
   if (!endpoint || endpoint.length > 1000) {

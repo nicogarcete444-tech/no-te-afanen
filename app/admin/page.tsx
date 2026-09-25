@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { isAdminEmail } from '@/lib/adminAuth';
+import { isAdminUser } from '@/lib/adminAuth';
 import { isPremiumStatusActive, premiumExpiresAt } from '@/lib/premium';
 import { formatArs, PREMIUM_MONTHLY_PRICE_ARS } from '@/lib/premiumPricing';
 import AdminPremiumControls from '@/components/AdminPremiumControls';
@@ -63,7 +63,7 @@ export default async function AdminPage() {
 
   // Mismo trato para "no logueado" y "logueado pero no admin": no hay que
   // darle pistas a nadie de que esta ruta existe o de por qué no entra.
-  if (!isAdminEmail(user?.email)) {
+  if (!isAdminUser(user)) {
     redirect('/');
   }
 

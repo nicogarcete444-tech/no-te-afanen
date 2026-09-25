@@ -6,7 +6,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@supabase/ssr": "^0.5.2",
@@ -24,7 +26,8 @@
     "@types/web-push": "^3.6.4",
     "eslint": "^9.39.5",
     "eslint-config-next": "16.3.6",
-    "typescript": "^5.5.3"
+    "typescript": "^5.5.3",
+    "vitest": "^3.2.7"
   },
   "browserslist": [
     "chrome >= 96",

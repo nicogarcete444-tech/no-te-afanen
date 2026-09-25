@@ -25,47 +25,59 @@ export type PushPayload = {
   tag?: string;
 };
 
-// Le manda el push a TODAS las suscripciones guardadas de un usuario (puede
-// tener varias: celu, notebook, etc). Si una suscripción quedó vieja/inválida
-// (410/404 — el usuario desinstaló la app o borró los datos del navegador),
-// se borra sola de la tabla para no seguir gastando intentos con ella.
-export async function sendPushToUser(userId: string, payload: PushPayload): Promise<number> {
-  if (!ensureConfigured()) return 0;
+type SubRow = { id: number; user_id: string; endpoint: string; p256dh: string; auth: string };
+
+async function sendToSubscription(admin: NonNullable<ReturnType<typeof createAdminClient>>, sub: SubRow, body: string) {
+  try {
+    await webpush.sendNotification({ endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } }, body, {
+      timeout: 8000,
+    });
+    return true;
+  } catch (err: any) {
+    const statusCode = err?.statusCode;
+    // 404/410: el usuario desinstaló la app o borró los datos del navegador.
+    // Se borra sola para no seguir gastando intentos con ella.
+    if (statusCode === 404 || statusCode === 410) {
+      await admin.from('push_subscriptions').delete().eq('id', sub.id);
+    }
+    // otros errores (red, rate limit del push service) se ignoran acá:
+    // no queremos que un envío fallido frene el resto de la tanda.
+    return false;
+  }
+}
+
+// Le manda el push a TODAS las suscripciones de una lista de usuarios con UNA
+// sola consulta (antes era un SELECT por usuario) y con concurrencia acotada.
+// Si un usuario no tiene ninguna suscripción, simplemente no recibe nada.
+export async function sendPushToUsers(userIds: string[], payload: PushPayload): Promise<number> {
+  if (!userIds.length || !ensureConfigured()) return 0;
 
   const admin = createAdminClient();
   if (!admin) return 0;
 
-  const { data: subs } = await admin
-    .from('push_subscriptions')
-    .select('id, endpoint, p256dh, auth')
-    .eq('user_id', userId);
+  const subs: SubRow[] = [];
+  const unique = Array.from(new Set(userIds));
+  // `in` con listas enormes rompe la URL: se consulta en tandas.
+  for (let i = 0; i < unique.length; i += 200) {
+    const { data } = await admin
+      .from('push_subscriptions')
+      .select('id, user_id, endpoint, p256dh, auth')
+      .in('user_id', unique.slice(i, i + 200));
+    if (data) subs.push(...(data as SubRow[]));
+  }
+  if (!subs.length) return 0;
 
-  if (!subs?.length) return 0;
-
-  let sent = 0;
   const body = JSON.stringify(payload);
-
-  await Promise.all(
-    subs.map(async (sub) => {
-      try {
-        await webpush.sendNotification(
-          {
-            endpoint: sub.endpoint,
-            keys: { p256dh: sub.p256dh, auth: sub.auth },
-          },
-          body
-        );
-        sent += 1;
-      } catch (err: any) {
-        const statusCode = err?.statusCode;
-        if (statusCode === 404 || statusCode === 410) {
-          await admin.from('push_subscriptions').delete().eq('id', sub.id);
-        }
-        // otros errores (red, rate limit del push service) se ignoran acá:
-        // no queremos que un envío fallido frene el resto de la tanda.
-      }
-    })
-  );
-
+  let sent = 0;
+  const CONCURRENCY = 10;
+  for (let i = 0; i < subs.length; i += CONCURRENCY) {
+    const results = await Promise.all(subs.slice(i, i + CONCURRENCY).map((sub) => sendToSubscription(admin, sub, body)));
+    sent += results.filter(Boolean).length;
+  }
   return sent;
+}
+
+// Versión de un solo usuario (se mantiene por compatibilidad).
+export async function sendPushToUser(userId: string, payload: PushPayload): Promise<number> {
+  return sendPushToUsers([userId], payload);
 }

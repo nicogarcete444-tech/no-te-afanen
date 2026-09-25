@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { isRateLimited, isValidProductId } from '@/lib/apiSecurity';
 import { fetchWithTimeout } from '@/lib/fetchWithTimeout';
+import { SITE_URL } from '@/lib/siteUrl';
 
 // Traduce un código de barras a un nombre de producto, usando las bases
 // públicas de Open * Facts. Lo usa el escáner: Precios Claros solo busca por
@@ -21,7 +22,7 @@ const OFF_DOMAINS = [
 const CACHE_SECONDS = 60 * 60 * 24 * 30; // un mes
 
 const OFF_HEADERS = {
-  'User-Agent': 'NoTeAfanen/1.0 (comparador de precios; https://github.com/no-te-afanen)',
+  'User-Agent': `NoTeAfanen/1.0 (comparador de precios; ${SITE_URL})`,
   Accept: 'application/json',
 };
 
@@ -62,7 +63,7 @@ async function lookupInDomain(domain: string, ean: string): Promise<string | nul
 }
 
 export async function GET(request: NextRequest) {
-  if (await isRateLimited(request, 'nombre-producto')) {
+  if (await isRateLimited(request, 'nombre-producto', undefined, { failMode: 'open' })) {
     return NextResponse.json({ error: 'Demasiados pedidos. Esperá un momento.' }, { status: 429 });
   }
 

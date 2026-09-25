@@ -1,160 +1,184 @@
-import { PRECIOS_CLAROS_BASE, PRECIOS_CLAROS_HEADERS } from '@/lib/preciosClarosBase';
-import { fetchWithTimeout } from '@/lib/fetchWithTimeout';
-import { isCarrefour, isChangomas, isCoto, isDia, isDisco, isJumbo } from '@/lib/chains';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { sendPushToUser } from '@/lib/webPush';
+import { sendPushToUsers } from '@/lib/webPush';
+import {
+  TRACKED_CHAINS,
+  fetchPricesForProduct,
+  fetchReferenceStores,
+  type ReferenceStore,
+} from '@/lib/referenceStores';
 
-// Punto de referencia para ubicar sucursales: Obelisco (CABA). El objetivo
-// del historial no es "el precio en la sucursal exacta del usuario" (eso ya
-// lo resuelve la búsqueda en vivo con geolocalización real) sino "cómo
-// evolucionó el precio de este producto en general" — un punto fijo y
-// estable en el tiempo es justamente lo que hace comparables los snapshots
-// de un día con los del día siguiente.
-const REFERENCE_LAT = -34.6037;
-const REFERENCE_LNG = -58.3816;
-
-// Mismas 6 cadenas para las que StoreLogo.tsx tiene logo propio: son las de
-// mayor cobertura nacional en Precios Claros, así que dan la serie más
-// completa y comparable día a día.
-const TRACKED_CHAINS: { test: (n: string) => boolean; label: string }[] = [
-  { test: isCarrefour, label: 'Carrefour' },
-  { test: isChangomas, label: 'Changomas' },
-  { test: isDisco, label: 'Disco' },
-  { test: isJumbo, label: 'Jumbo' },
-  { test: isCoto, label: 'Coto' },
-  // isDia matchea la PALABRA: el `includes('dia')` de antes agarraba también
-  // a "Diarco" y guardaba sus precios como si fueran de Día.
-  { test: isDia, label: 'Dia' },
-];
-
-const MAX_PRODUCTS_PER_RUN = 40; // no golpear Precios Claros de más en una sola corrida
+// Cuántos productos se procesan por corrida. Antes eran 40 con un cupo total
+// de 2.000: cada producto se actualizaba una vez cada ~50 días. Ahora se
+// priorizan los que alguien SIGUE (tienen alertas) y el resto se completa con
+// los vistos hace poco. El corte real lo pone TIME_BUDGET_MS, no este número.
+const MAX_PRODUCTS_PER_RUN = 120;
+// Margen bajo maxDuration (60 s) de la ruta del cron: no se lanzan tandas
+// nuevas pasado este tiempo, para que la corrida cierre limpia.
+const TIME_BUDGET_MS = 45_000;
 
 // Un cambio (para cualquiera de los dos lados) "cuenta" para avisar recién a
 // partir de este %, para no generar notificaciones por ruido de centavos
 // (redondeos, cambios de oferta por horas) que no representan un cambio real.
 const MIN_CHANGE_PCT_TO_NOTIFY = 3;
 
-type ReferenceStore = { chainLabel: string; sucursalId: string };
+// Solo se avisa "bajó/subió" si el snapshot con el que se compara es
+// reciente. Con uno de hace semanas el aviso mezcla varios cambios y es
+// engañoso ("bajó 12 %" cuando en realidad bajó hace tres semanas).
+const MAX_PREV_AGE_MS_TO_NOTIFY = 3 * 24 * 60 * 60 * 1000;
 
-async function fetchReferenceStores(): Promise<ReferenceStore[]> {
-  const url = `${PRECIOS_CLAROS_BASE}/sucursales?lat=${REFERENCE_LAT}&lng=${REFERENCE_LNG}&limit=200`;
-  const res = await fetchWithTimeout(url, { headers: PRECIOS_CLAROS_HEADERS, cache: 'no-store' }, 10_000);
-  if (!res.ok) throw new Error('sucursales HTTP ' + res.status);
-  const data = await res.json();
-  const list: any[] = data?.sucursales || (Array.isArray(data) ? data : []);
-
-  const found: ReferenceStore[] = [];
-  for (const chain of TRACKED_CHAINS) {
-    const match = list.find((s) => s?.banderaDescripcion && chain.test(String(s.banderaDescripcion)));
-    const id = match?.id;
-    if (id) found.push({ chainLabel: chain.label, sucursalId: String(id) });
-  }
-  return found;
-}
-
-function toNum(v: unknown): number | undefined {
-  const n = typeof v === 'string' ? parseFloat(v) : (v as number);
-  return typeof n === 'number' && !Number.isNaN(n) && n > 0 ? n : undefined;
-}
-
-async function fetchPricesForProduct(
-  ean: string,
-  stores: ReferenceStore[]
-): Promise<{ chain: string; precio: number; precioLista?: number }[]> {
-  const ids = stores.map((s) => s.sucursalId).join(',');
-  const url =
-    `${PRECIOS_CLAROS_BASE}/producto?id_producto=${encodeURIComponent(ean)}` +
-    `&array_sucursales=${encodeURIComponent(ids)}&limit=${stores.length}`;
-  const res = await fetchWithTimeout(url, { headers: PRECIOS_CLAROS_HEADERS, cache: 'no-store' }, 8_000);
-  if (!res.ok) throw new Error('producto HTTP ' + res.status);
-  const data = await res.json();
-
-  const out: { chain: string; precio: number; precioLista?: number }[] = [];
-  for (const suc of data?.sucursales || []) {
-    if (!suc || suc.message) continue;
-    const composite = `${suc.comercioId}-${suc.banderaId}-${suc.id}`;
-    const store = stores.find((s) => s.sucursalId === composite);
-    if (!store) continue;
-
-    const precioLista = toNum(suc.preciosProducto?.precioLista);
-    const promo = [toNum(suc.preciosProducto?.promo1?.precio), toNum(suc.preciosProducto?.promo2?.precio)].filter(
-      (n): n is number => typeof n === 'number'
-    );
-    // El más bajo entre promos y lista: una "promo" más cara que la lista
-    // (pasa con promos por cantidad) no es el precio al que se compra.
-    const candidatos = [...promo, ...(precioLista ? [precioLista] : [])];
-    const precio = candidatos.length ? Math.min(...candidatos) : undefined;
-    if (typeof precio !== 'number') continue;
-
-    out.push({ chain: store.chainLabel, precio, precioLista });
-  }
-  return out;
-}
+// Retención: sin esto price_snapshots y price_drop_notifications crecen sin
+// límite.
+const SNAPSHOT_RETENTION_DAYS = 180;
+const NOTIFICATION_RETENTION_DAYS = 90;
+// Productos que nadie mira ni sigue hace tanto tiempo salen de la cola.
+const STALE_TRACKED_DAYS = 90;
 
 export type SnapshotRunResult = {
   processed: number;
   snapshotsInserted: number;
   notificationsSent: number;
+  purged: { snapshots: number; notifications: number; tracked: number };
   errors: string[];
 };
 
-// Corre una tanda del cron: trae hasta MAX_PRODUCTS_PER_RUN productos
-// (los que hace más tiempo que no se les toma una foto de precio),
-// consulta Precios Claros para cada uno y guarda lo que encuentre.
-// Un producto que falla no frena a los demás — se junta el error y se sigue.
-export async function runPriceSnapshotBatch(): Promise<SnapshotRunResult> {
-  const admin = createAdminClient();
-  if (!admin) {
-    return { processed: 0, snapshotsInserted: 0, notificationsSent: 0, errors: ['Falta SUPABASE_SERVICE_ROLE_KEY en el entorno.'] };
-  }
+function emptyResult(errors: string[] = []): SnapshotRunResult {
+  return {
+    processed: 0,
+    snapshotsInserted: 0,
+    notificationsSent: 0,
+    purged: { snapshots: 0, notifications: 0, tracked: 0 },
+    errors,
+  };
+}
 
-  const { data: products, error: selectError } = await admin
+const daysAgoIso = (days: number) => new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+
+// Cola de la corrida: primero los productos seguidos (con alertas), del que
+// hace más que no se actualiza; después el resto de los vistos hace poco.
+async function pickQueue(admin: NonNullable<ReturnType<typeof createAdminClient>>) {
+  const { data: watched } = await admin.from('price_alerts').select('ean').limit(5000);
+  const watchedEans = Array.from(new Set((watched || []).map((r) => r.ean as string)));
+
+  const queue: { ean: string; nombre: string | null }[] = [];
+
+  for (let i = 0; i < watchedEans.length && queue.length < MAX_PRODUCTS_PER_RUN; i += 200) {
+    const { data } = await admin
+      .from('tracked_products')
+      .select('ean, nombre, last_snapshot_at')
+      .in('ean', watchedEans.slice(i, i + 200));
+    queue.push(...(data || []).map((r) => ({ ean: r.ean as string, nombre: (r.nombre as string | null) ?? null })));
+  }
+  // Los seguidos más atrasados primero (el orden dentro de cada tanda de 200
+  // no es global, alcanza para que ninguno quede sin turno).
+  const seen = new Set(queue.map((q) => q.ean));
+
+  if (queue.length < MAX_PRODUCTS_PER_RUN) {
+    const { data, error } = await admin
+      .from('tracked_products')
+      .select('ean, nombre')
+      .gte('last_seen_at', daysAgoIso(30))
+      .order('last_snapshot_at', { ascending: true, nullsFirst: true })
+      .limit(MAX_PRODUCTS_PER_RUN);
+    if (error) throw new Error(error.message);
+    for (const r of data || []) {
+      if (queue.length >= MAX_PRODUCTS_PER_RUN) break;
+      if (seen.has(r.ean as string)) continue;
+      seen.add(r.ean as string);
+      queue.push({ ean: r.ean as string, nombre: (r.nombre as string | null) ?? null });
+    }
+  }
+  return queue.slice(0, MAX_PRODUCTS_PER_RUN);
+}
+
+async function purgeOldData(admin: NonNullable<ReturnType<typeof createAdminClient>>, errors: string[]) {
+  const purged = { snapshots: 0, notifications: 0, tracked: 0 };
+
+  const snaps = await admin
+    .from('price_snapshots')
+    .delete({ count: 'exact' })
+    .lt('captured_at', daysAgoIso(SNAPSHOT_RETENTION_DAYS));
+  if (snaps.error) errors.push(`retención snapshots: ${snaps.error.message}`);
+  else purged.snapshots = snaps.count ?? 0;
+
+  const notes = await admin
+    .from('price_drop_notifications')
+    .delete({ count: 'exact' })
+    .lt('created_at', daysAgoIso(NOTIFICATION_RETENTION_DAYS));
+  if (notes.error) errors.push(`retención notificaciones: ${notes.error.message}`);
+  else purged.notifications = notes.count ?? 0;
+
+  // Productos abandonados: nadie los abrió hace mucho. Los que tienen alertas
+  // se conservan siempre. Se calcula en el server para no depender de un
+  // NOT IN gigante en la URL.
+  const { data: stale } = await admin
     .from('tracked_products')
-    .select('ean, nombre')
-    .order('last_snapshot_at', { ascending: true, nullsFirst: true })
-    .limit(MAX_PRODUCTS_PER_RUN);
+    .select('ean')
+    .lt('last_seen_at', daysAgoIso(STALE_TRACKED_DAYS))
+    .limit(500);
+  const staleEans = (stale || []).map((r) => r.ean as string);
+  if (staleEans.length) {
+    const { data: withAlerts } = await admin.from('price_alerts').select('ean').in('ean', staleEans);
+    const keep = new Set((withAlerts || []).map((r) => r.ean as string));
+    const toDelete = staleEans.filter((e) => !keep.has(e));
+    if (toDelete.length) {
+      const del = await admin.from('tracked_products').delete({ count: 'exact' }).in('ean', toDelete);
+      if (del.error) errors.push(`retención productos: ${del.error.message}`);
+      else purged.tracked = del.count ?? 0;
+    }
+  }
+  return purged;
+}
 
-  if (selectError) {
-    return { processed: 0, snapshotsInserted: 0, notificationsSent: 0, errors: [selectError.message] };
-  }
-  if (!products || products.length === 0) {
-    return { processed: 0, snapshotsInserted: 0, notificationsSent: 0, errors: [] };
-  }
+// Corre una tanda del cron: toma la cola priorizada, consulta Precios Claros
+// para cada producto y guarda lo que encuentre. Un producto que falla no
+// frena a los demás — se junta el error y se sigue.
+export async function runPriceSnapshotBatch(): Promise<SnapshotRunResult> {
+  const startedAt = Date.now();
+  const admin = createAdminClient();
+  if (!admin) return emptyResult(['Falta SUPABASE_SERVICE_ROLE_KEY en el entorno.']);
 
   const errors: string[] = [];
-  let referenceStores: ReferenceStore[];
+  let products: { ean: string; nombre: string | null }[];
   try {
-    referenceStores = await fetchReferenceStores();
+    products = await pickQueue(admin);
   } catch (e) {
-    return { processed: 0, snapshotsInserted: 0, notificationsSent: 0, errors: [`No se pudieron traer sucursales de referencia: ${e}`] };
+    return emptyResult([`No se pudo armar la cola: ${e}`]);
   }
-  if (!referenceStores.length) {
-    return { processed: 0, snapshotsInserted: 0, notificationsSent: 0, errors: ['No se encontró ninguna cadena conocida cerca del punto de referencia.'] };
+
+  let referenceStores: ReferenceStore[] = [];
+  if (products.length) {
+    try {
+      referenceStores = await fetchReferenceStores();
+    } catch (e) {
+      return emptyResult([`No se pudieron traer sucursales de referencia: ${e}`]);
+    }
+    if (!referenceStores.length) {
+      return emptyResult(['No se encontró ninguna cadena conocida cerca del punto de referencia.']);
+    }
   }
 
   let snapshotsInserted = 0;
   let notificationsSent = 0;
+  let processed = 0;
   const now = new Date().toISOString();
 
   async function processProduct({ ean, nombre }: { ean: string; nombre: string | null }) {
     try {
       // Precios de la corrida ANTERIOR para este producto, POR CADENA. Todas
       // las filas de una corrida comparten captured_at, así que nos quedamos
-      // solo con las de la fecha más reciente (antes se tomaban las últimas
-      // 6 filas a secas: si la corrida anterior había encontrado el producto
-      // en 3 cadenas, las otras 3 filas eran de una corrida todavía más
-      // vieja y se mezclaban).
+      // solo con las de la fecha más reciente.
       const { data: prevRows } = await admin!
         .from('price_snapshots')
         .select('chain, precio, captured_at')
         .eq('ean', ean)
         .order('captured_at', { ascending: false })
         .limit(TRACKED_CHAINS.length);
-      const latest = prevRows?.[0]?.captured_at;
+      const latest = prevRows?.[0]?.captured_at as string | undefined;
       const prevByChain = new Map<string, number>();
       (prevRows || []).forEach((r) => {
         if (r.captured_at === latest) prevByChain.set(r.chain as string, Number(r.precio));
       });
+      const prevIsRecent = !!latest && Date.now() - new Date(latest).getTime() <= MAX_PREV_AGE_MS_TO_NOTIFY;
 
       const prices = await fetchPricesForProduct(ean, referenceStores);
       if (prices.length) {
@@ -173,12 +197,10 @@ export async function runPriceSnapshotBatch(): Promise<SnapshotRunResult> {
           snapshotsInserted += prices.length;
 
           // Se compara el mejor precio SOLO entre las cadenas que aparecen en
-          // las dos corridas. Antes se comparaba el mínimo de cada corrida a
-          // secas: si la cadena más barata dejaba de informar el producto un
-          // día, el "mejor precio" subía y todos los que seguían el producto
-          // recibían un aviso de "Subió de precio" que no era cierto.
+          // las dos corridas (si la más barata deja de informar el producto un
+          // día, no es una "suba"). Y solo si el snapshot previo es reciente.
           const common = prices.filter((p) => prevByChain.has(p.chain));
-          if (common.length) {
+          if (prevIsRecent && common.length) {
             const prevBest = Math.min(...common.map((p) => prevByChain.get(p.chain)!));
             const newBest = Math.min(...common.map((p) => p.precio));
             const pctChange = prevBest ? Math.round((1 - newBest / prevBest) * 100) : 0;
@@ -205,18 +227,16 @@ export async function runPriceSnapshotBatch(): Promise<SnapshotRunResult> {
                   errors.push(`${ean} (notificaciones): ${notifyError.message}`);
                 } else {
                   notificationsSent += watchers.length;
-                  // Push real además del aviso in-app: si el usuario no tiene
-                  // ninguna suscripción guardada, sendPushToUser no hace nada
-                  // (no rompe el flujo si todavía no activó los avisos).
-                  await Promise.all(
-                    watchers.map((w) =>
-                      sendPushToUser(w.user_id, {
-                        title: direction === 'bajo' ? 'Bajó de precio' : 'Subió de precio',
-                        body: `${nombre || ean}: ${direction === 'bajo' ? '-' : '+'}${pctAbs}% (referencia CABA)`,
-                        url: '/',
-                        tag: `price-change-${ean}`,
-                      })
-                    )
+                  // Push real además del aviso in-app, en UNA consulta de
+                  // suscripciones para todos los que siguen el producto.
+                  await sendPushToUsers(
+                    watchers.map((w) => w.user_id as string),
+                    {
+                      title: direction === 'bajo' ? 'Bajó de precio' : 'Subió de precio',
+                      body: `${nombre || ean}: ${direction === 'bajo' ? '-' : '+'}${pctAbs}% (referencia CABA)`,
+                      url: '/',
+                      tag: `price-change-${ean}`,
+                    }
                   );
                 }
               }
@@ -233,14 +253,17 @@ export async function runPriceSnapshotBatch(): Promise<SnapshotRunResult> {
     }
   }
 
-  // De a 4 productos en paralelo. Antes era uno por vez, con 2-3 pedidos de
-  // red cada uno y SIN timeout: 40 productos seguidos no entraban en el
-  // tiempo de una función serverless, la corrida se cortaba a la mitad y los
-  // productos del final de la cola no se procesaban nunca.
+  // De a 4 productos en paralelo, cortando cuando se acaba el presupuesto de
+  // tiempo: lo que no entra queda al principio de la cola de la próxima
+  // corrida (last_snapshot_at más viejo).
   const CONCURRENCY = 4;
   for (let i = 0; i < products.length; i += CONCURRENCY) {
-    await Promise.all(products.slice(i, i + CONCURRENCY).map(processProduct));
+    if (Date.now() - startedAt > TIME_BUDGET_MS) break;
+    const batch = products.slice(i, i + CONCURRENCY);
+    await Promise.all(batch.map(processProduct));
+    processed += batch.length;
   }
 
-  return { processed: products.length, snapshotsInserted, notificationsSent, errors };
+  const purged = await purgeOldData(admin, errors);
+  return { processed, snapshotsInserted, notificationsSent, purged, errors };
 }

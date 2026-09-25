@@ -27,6 +27,7 @@ export default function Header({
   userEmail,
   isAdmin,
   onLogout,
+  onDeleteAccount,
   onOpenSavingsHistory,
   onOpenPremium,
   premium,
@@ -42,6 +43,7 @@ export default function Header({
   userEmail: string | null;
   isAdmin?: boolean;
   onLogout: () => void;
+  onDeleteAccount: () => void;
   onOpenSavingsHistory: () => void;
   onOpenPremium: () => void;
   premium: boolean;
@@ -451,6 +453,16 @@ export default function Header({
                       >
                         <AccountIcon name="salir" />
                         <span>Cerrar sesión</span>
+                      </button>
+                      <button
+                        className="account-row account-row-danger"
+                        onClick={() => {
+                          setAccountOpen(false);
+                          onDeleteAccount();
+                        }}
+                      >
+                        <AccountIcon name="salir" />
+                        <span>Eliminar mi cuenta</span>
                       </button>
                     </div>
                   ) : (

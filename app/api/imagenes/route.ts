@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { isRateLimited, RATE_LIMITS } from '@/lib/apiSecurity';
 import { fetchWithTimeout } from '@/lib/fetchWithTimeout';
+import { SITE_URL } from '@/lib/siteUrl';
 
 // Con hasta MAX_EANS productos por pedido y (antes) hasta 4 llamadas
 // secuenciales por producto, esta ruta podía tardar bastante; le damos
@@ -72,7 +73,12 @@ const VTEX_STORES_2 = [
   'www.hiperlibertad.com.ar',
 ];
 
-const MAX_EANS = 60;
+// Interruptor por si una tienda o MercadoLibre reclama, o te empiezan a
+// bloquear: IMAGE_STORE_LOOKUP=0 deja SOLO las bases abiertas (Open * Facts) y
+// apaga las consultas a tiendas VTEX y MercadoLibre sin tocar código.
+const STORE_LOOKUP_ENABLED = process.env.IMAGE_STORE_LOOKUP !== '0';
+
+const MAX_EANS = 20;
 const CACHE_SECONDS = 60 * 60 * 24 * 30; // foto encontrada: un mes
 const MISS_CACHE_SECONDS = 60 * 60 * 24; // "ninguna fuente la tiene": un día
 const PENDING_CACHE_SECONDS = 60; // alguna fuente falló: que se reintente pronto
@@ -82,18 +88,19 @@ const PROVIDER_REVALIDATE = 60 * 60 * 24 * 3;
 // Tiempo máximo total del pedido (la función corta a los 25s).
 const TOTAL_BUDGET_MS = 20_000;
 const PER_CALL_TIMEOUT_MS = 4_000;
-const MAX_CONCURRENT_CALLS = 40;
+const MAX_CONCURRENT_CALLS = 12;
+const MAX_PROBES_PER_REQUEST = 30;
 
 // Open Food Facts pide identificarse. Sin esto, los pedidos anónimos entran
 // en la cola lenta o directamente se rechazan.
 const OFF_HEADERS = {
-  'User-Agent': 'NoTeAfanen/1.0 (comparador de precios; https://github.com/no-te-afanen)',
+  'User-Agent': `NoTeAfanen/1.0 (comparador de precios; ${SITE_URL})`,
   Accept: 'application/json',
 };
 
 // MercadoLibre y las tiendas también piden un User-Agent propio.
 const ML_HEADERS = {
-  'User-Agent': 'NoTeAfanen/1.0 (comparador de precios)',
+  'User-Agent': `NoTeAfanen/1.0 (comparador de precios; ${SITE_URL})`,
   Accept: 'application/json',
 };
 
@@ -320,6 +327,8 @@ async function resolveOne(
   if (u1) return { url: u1, complete: true };
   if (l1.some((p) => p.status === 'error')) failed = true;
 
+  if (!STORE_LOOKUP_ENABLED) return { url: null, complete: !failed };
+
   // Nivel 2: las 4 tiendas grandes por código de barras exacto. Solo si el
   // nivel 1 no tuvo.
   const l2 = await Promise.all(VTEX_STORES.map((h) => limit(() => probeVtex(h, ean, deadline))));
@@ -342,16 +351,17 @@ async function resolveOne(
 }
 
 export async function GET(request: NextRequest) {
-  if (await isRateLimited(request, 'imagenes', RATE_LIMITS.imagenes)) {
-    return NextResponse.json({ error: 'Demasiados pedidos. Esperá un momento.' }, { status: 429 });
-  }
-
   // eans y names viajan en paralelo (mismo índice = mismo producto). names
   // es opcional: cada nombre va con encodeURIComponent individual (así una
   // coma dentro de un nombre no rompe el separador), así que se decodifica
   // por segmento antes de usarlo.
-  const rawEans = (request.nextUrl.searchParams.get('eans') || '').split(',').map((e) => e.trim());
-  const rawNames = (request.nextUrl.searchParams.get('names') || '').split(',');
+  const eansParam = request.nextUrl.searchParams.get('eans') || '';
+  const namesParam = request.nextUrl.searchParams.get('names') || '';
+  if (eansParam.length > 512 || namesParam.length > 10000) {
+    return NextResponse.json({ error: 'La consulta supera el tamaño permitido.' }, { status: 400 });
+  }
+  const rawEans = eansParam.split(',').map((e) => e.trim());
+  const rawNames = namesParam.split(',');
 
   const nameByEan = new Map<string, string>();
   rawEans.forEach((ean, i) => {
@@ -359,7 +369,7 @@ export async function GET(request: NextRequest) {
     const raw = rawNames[i];
     if (!raw) return;
     try {
-      const decoded = decodeURIComponent(raw).trim();
+      const decoded = decodeURIComponent(raw).trim().slice(0, 120);
       if (decoded) nameByEan.set(ean, decoded);
     } catch {
       // nombre mal codificado: seguimos sin él, no es motivo para cortar todo
@@ -372,12 +382,26 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Falta el parámetro "eans".' }, { status: 400 });
   }
 
+  // El límite se mide en productos, no en requests: un pedido con 20 EAN
+  // dispara hasta MAX_PROBES_PER_REQUEST llamadas a terceros, así que pesa 20
+  // veces más que uno con 1. Si falla el limitador compartido se deja pasar
+  // (es una lectura cacheable), pero el contador local sigue vigente.
+  if (await isRateLimited(request, 'imagenes', RATE_LIMITS.imagenes, { cost: eans.length, failMode: 'open' })) {
+    return NextResponse.json({ error: 'Demasiados pedidos. Esperá un momento.' }, { status: 429 });
+  }
+
   const deadline = Date.now() + TOTAL_BUDGET_MS;
   const limit = createLimiter(MAX_CONCURRENT_CALLS);
+  let probes = 0;
+  const budgetedLimit = <T>(fn: () => Promise<T>) => {
+    if (probes >= MAX_PROBES_PER_REQUEST) return Promise.resolve(ERROR as unknown as T);
+    probes++;
+    return limit(fn);
+  };
 
   // Los productos van en paralelo entre sí; cada uno recorre sus niveles en
   // orden.
-  const results = await Promise.all(eans.map((ean) => resolveOne(ean, nameByEan.get(ean), deadline, limit)));
+  const results = await Promise.all(eans.map((ean) => resolveOne(ean, nameByEan.get(ean), deadline, budgetedLimit)));
 
   const imagenes: Record<string, string | null> = {};
   const pendientes: string[] = [];
