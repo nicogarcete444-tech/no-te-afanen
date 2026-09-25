@@ -28,14 +28,13 @@ export default function PrivacidadPage() {
           <strong>No Te Afanen</strong> es operada por:
         </p>
         <ul>
-          <li>Titular: Nicolás Garcete — DNI 50.130.773 — CUIL 20-50130773-5</li>
+          <li>Titular: Nicolás Garcete</li>
           <li>Domicilio: Calle 171 N.º 1702, Bernal, Quilmes, Provincia de Buenos Aires, Argentina</li>
           <li>Email de contacto: nicogarcete444@gmail.com</li>
         </ul>
         <p>
-          Este dato es obligatorio bajo la Ley 25.326 de Protección de Datos Personales:
-          quien recolecta datos tiene que poder ser identificado por quien se los da,
-          para que pueda ejercer sus derechos o hacer un reclamo.
+          La identidad y el domicilio de contacto permiten identificar al responsable
+          y ejercer los derechos previstos por la Ley 25.326.
         </p>
       </Section>
 
@@ -56,6 +55,12 @@ export default function PrivacidadPage() {
             tu cuenta, para que lo encuentres igual si volvés a entrar o cambiás de
             dispositivo.
           </li>
+          <li>
+            <strong>Historial de ahorros, alertas de precios, uso de comparaciones y
+            suscripciones a notificaciones</strong>, para ofrecer esas funciones. La
+            suscripción de notificaciones incluye el endpoint del navegador y claves
+            técnicas necesarias para enviar el aviso.
+          </li>
         </ul>
 
         <SubTitle>2.2. Ubicación</SubTitle>
@@ -64,17 +69,17 @@ export default function PrivacidadPage() {
           sucursales cercanas y traerte precios relevantes para tu zona — esto incluye la
           comparación por súper y el feed de &quot;Ofertas cerca tuyo&quot;. Esa ubicación
           se envía a nuestro propio servidor y de ahí a Precios Claros (ver sección 4); no
-          la guardamos asociada a tu cuenta ni la usamos con otro fin. Podés negar el
+          la guardamos asociada a tu cuenta ni la usamos con otro fin. El hosting puede
+          procesar registros técnicos temporales de las solicitudes. Podés negar el
           permiso de ubicación desde el navegador en cualquier momento; sin él, la app no
           puede comparar precios por sucursal.
         </p>
 
         <SubTitle>2.3. Búsquedas y escaneo de código de barras</SubTitle>
         <p>
-          Lo que escribís en el buscador se envía a Precios Claros (a través de nuestro
-          servidor) para encontrar productos. Si usás el escáner de código de barras, el
-          código se envía directamente desde tu navegador a Open Food Facts para
-          identificar el producto (ver sección 4).
+          Los términos que escribís y los códigos escaneados se envían a nuestro servidor
+          para consultar fuentes de productos y precios. El código de barras no se manda
+          directamente desde el navegador a Open Food Facts.
         </p>
 
         <SubTitle>2.4. Si te suscribís a Premium</SubTitle>
@@ -98,6 +103,15 @@ export default function PrivacidadPage() {
           Google Analytics o Meta Pixel), no guarda tu ubicación exacta de forma
           permanente, y no procesa ni almacena datos de tarjetas o medios de pago (no
           hay ningún cobro automático dentro de la app).
+        </p>
+        <SubTitle>2.6. Datos guardados solo en tu dispositivo</SubTitle>
+        <p>
+          En el almacenamiento local del navegador pueden guardarse el carrito de
+          invitado, el historial de ahorros de invitado, plantillas de carrito, el tema
+          elegido y datos de catálogo para facilitar el uso sin conexión. Esos datos no
+          se sincronizan con tu cuenta mientras navegás como invitado/a. Un enlace de
+          carrito compartido contiene los productos y cantidades codificados en la URL;
+          cualquiera que tenga el enlace puede leerlos.
         </p>
       </Section>
 
@@ -128,10 +142,10 @@ export default function PrivacidadPage() {
             precio real en la góndola, porque la actualización depende de cada comercio.
           </li>
           <li>
-            <strong>Fotos de producto</strong>: provienen de{' '}
-            <strong>Open Food Facts</strong> (openfoodfacts.org), una base de datos
-            colaborativa y pública, consultada por código de barras. No todos los
-            productos tienen foto disponible.
+            <strong>Nombres e imágenes</strong>: según disponibilidad, se consultan
+            Open Food Facts (incluidas sus bases de alimentos, cosméticos y mascotas),
+            catálogos de comercios que usan VTEX y Mercado Libre. No todos los productos
+            tienen datos o fotos disponibles.
           </li>
         </ul>
         <p>
@@ -140,22 +154,32 @@ export default function PrivacidadPage() {
           correcto es reportarlo directamente a Precios Claros, ya que es su fuente
           original.
         </p>
+        <p>
+          El historial de precios y los avisos automáticos comparan sucursales de
+          referencia cercanas al Obelisco (CABA). No necesariamente representan el precio
+          de una sucursal cercana a tu ubicación.
+        </p>
       </Section>
 
       <Section title="5. Con quién se comparten tus datos">
         <ul>
           <li>
             <strong>Supabase</strong> (proveedor de base de datos y autenticación): aloja
-            tu email, tu contraseña encriptada y tu carrito.
+            tu email, credenciales de autenticación, carrito, historial de ahorros,
+            alertas, uso de comparaciones y suscripciones a notificaciones cuando
+            iniciás sesión.
           </li>
           <li>
-            <strong>Precios Claros / Open Food Facts</strong>: reciben tu ubicación
-            aproximada y tus términos de búsqueda o el código de barras escaneado, solo
-            para devolverte el resultado (no les mandamos tu email ni tu identidad).
+            <strong>Precios Claros</strong>: recibe las consultas de productos y la
+            ubicación aproximada necesaria para buscar sucursales cercanas. Open Food
+            Facts, comercios que publican catálogos VTEX y Mercado Libre pueden recibir
+            códigos o términos de búsqueda para encontrar nombres e imágenes. No les
+            enviamos deliberadamente tu email ni tu identidad.
           </li>
           <li>
             <strong>Vercel</strong> (o el hosting donde corra la app): procesa las
-            solicitudes técnicas para que la app funcione.
+            solicitudes técnicas para que la app funcione; el proveedor puede procesar
+            registros técnicos de conexión según su servicio.
           </li>
           <li>
             <strong>WhatsApp (Meta)</strong>: si nos escribís para darte de alta o de
@@ -198,8 +222,7 @@ export default function PrivacidadPage() {
         </ul>
         <p>
           Para ejercer cualquiera de estos derechos, escribinos a nicogarcete444@gmail.com.
-          También podés eliminar tu cuenta vos mismo/a desde la app si
-          agregamos esa opción, o pedirlo por mail mientras tanto.
+          Para eliminar tu cuenta y los datos asociados, escribinos a ese correo.
         </p>
         <p style={{ marginTop: 10 }}>
           <strong>

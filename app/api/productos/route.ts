@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { fetchPreciosClaros } from '@/lib/preciosClarosBase';
-import { getClientIp, isRateLimited, parseLat, parseLimit, parseLng, RATE_LIMITS, sanitizeQuery } from '@/lib/apiSecurity';
+import { isRateLimited, parseLat, parseLimit, parseLng, RATE_LIMITS, sanitizeQuery } from '@/lib/apiSecurity';
 import { buildFallbackCandidates, isWholeMatch, rankByTokens } from '@/lib/searchFallback';
 import { relatedTerms } from '@/lib/searchAliases';
 
@@ -18,7 +18,7 @@ export const maxDuration = 30;
 // Por eso el bloqueo CORS de Precios Claros no aplica acá: el navegador
 // le habla a NUESTRO dominio, y nosotros le hablamos a Precios Claros por atrás.
 export async function GET(request: NextRequest) {
-  if (isRateLimited('productos:' + getClientIp(request), RATE_LIMITS.productos)) {
+  if (await isRateLimited(request, 'productos', RATE_LIMITS.productos)) {
     return NextResponse.json({ error: 'Demasiadas búsquedas. Esperá un momento.' }, { status: 429 });
   }
 
@@ -55,6 +55,10 @@ export async function GET(request: NextRequest) {
   // trae bastante más y, si la página viene llena, una segunda.
   const SMART_PAGE = 40;
   const SMART_MAX = 80;
+  // A single smart search can fan out to related phrases and fallbacks.
+  // Bound total upstream work independently of the incoming-request limit.
+  let upstreamCalls = 0;
+  const MAX_UPSTREAM_CALLS = 16;
 
   const buildUrl = (q: string, size: number, offset: number) =>
     `${API_URL}?string=${encodeURIComponent(q)}&lat=${lat}&lng=${lng}&offset=${offset}&limit=${size}&sort=-cant_sucursales_disponible`;
@@ -66,6 +70,8 @@ export async function GET(request: NextRequest) {
     q: string,
     opts?: { timeoutMs?: number; retries?: number; size?: number; offset?: number }
   ): Promise<{ ok: boolean; data: any }> {
+    if (upstreamCalls >= MAX_UPSTREAM_CALLS) return { ok: false, data: null };
+    upstreamCalls++;
     const { size = limit, offset = 0, ...net } = opts || {};
     const upstream = await fetchPreciosClaros(buildUrl(q, size, offset), 60 * 60 * 6, net);
     if (!upstream.ok) return { ok: false, data: null };

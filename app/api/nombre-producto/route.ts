@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getClientIp, isRateLimited, isValidProductId } from '@/lib/apiSecurity';
+import { isRateLimited, isValidProductId } from '@/lib/apiSecurity';
 import { fetchWithTimeout } from '@/lib/fetchWithTimeout';
 
 // Traduce un código de barras a un nombre de producto, usando las bases
@@ -62,7 +62,7 @@ async function lookupInDomain(domain: string, ean: string): Promise<string | nul
 }
 
 export async function GET(request: NextRequest) {
-  if (isRateLimited('nombre-producto:' + getClientIp(request))) {
+  if (await isRateLimited(request, 'nombre-producto')) {
     return NextResponse.json({ error: 'Demasiados pedidos. Esperá un momento.' }, { status: 429 });
   }
 

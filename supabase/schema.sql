@@ -65,6 +65,46 @@ drop policy if exists "savings_log_insert_own" on public.savings_log;
 create policy "savings_log_insert_own" on public.savings_log
   for insert with check (auth.uid() = user_id);
 
+-- Bound user-controlled savings rows as well as access: RLS proves ownership,
+-- but does not validate values or prevent a single account filling the table.
+create or replace function public.enforce_savings_log_limits()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_total integer;
+  v_entry record;
+begin
+  if new.amount <= 0 or new.amount > 100000000 then
+    raise exception 'monto_ahorro_invalido';
+  end if;
+  if jsonb_typeof(coalesce(new.categories, '{}'::jsonb)) <> 'object'
+     or pg_column_size(coalesce(new.categories, '{}'::jsonb)) > 512 then
+    raise exception 'categorias_ahorro_invalidas';
+  end if;
+  for v_entry in select key, value from jsonb_each(coalesce(new.categories, '{}'::jsonb)) loop
+    if length(v_entry.key) > 60 or jsonb_typeof(v_entry.value) <> 'number'
+       or (v_entry.value #>> '{}')::numeric < 0
+       or (v_entry.value #>> '{}')::numeric > 100000000 then
+      raise exception 'categorias_ahorro_invalidas';
+    end if;
+  end loop;
+
+  perform pg_advisory_xact_lock(hashtextextended(new.user_id::text, 0));
+  select count(*) into v_total from public.savings_log where user_id = new.user_id;
+  if v_total >= 10000 then
+    raise exception 'limite_historial_ahorro';
+  end if;
+  return new;
+end;
+$$;
+drop trigger if exists savings_log_limits on public.savings_log;
+create trigger savings_log_limits
+  before insert on public.savings_log
+  for each row execute function public.enforce_savings_log_limits();
+
 -- ============================================================
 -- Historial de precios (evolución de un producto en el tiempo)
 -- ============================================================
@@ -447,6 +487,10 @@ as $$
   );
 $$;
 
+-- No exponer a clientes la consulta SECURITY DEFINER del estado Premium.
+revoke all on function public.is_premium_user(uuid) from public, anon, authenticated;
+grant execute on function public.is_premium_user(uuid) to service_role;
+
 -- --- Tope de alertas (free: 5 productos vigilados a la vez) ---------------
 create or replace function public.enforce_alert_limit()
 returns trigger
@@ -458,6 +502,15 @@ declare
   actuales integer;
 begin
   if public.is_premium_user(new.user_id) then
+    return new;
+  end if;
+
+  -- Serializa altas del mismo usuario para que dos pedidos simultáneos no
+  -- lean el mismo conteo y superen el límite.
+  perform pg_advisory_xact_lock(hashtextextended(new.user_id::text, 0));
+
+  -- Un upsert del mismo producto no agrega una alerta nueva.
+  if exists (select 1 from public.price_alerts where user_id = new.user_id and ean = new.ean) then
     return new;
   end if;
 
@@ -490,6 +543,13 @@ as $$
 declare
   distintos integer;
 begin
+  if jsonb_typeof(coalesce(new.items, '{}'::jsonb)) <> 'object'
+     or jsonb_typeof(coalesce(new.live_products, '{}'::jsonb)) <> 'object'
+     or pg_column_size(coalesce(new.items, '{}'::jsonb)) > 65536
+     or pg_column_size(coalesce(new.live_products, '{}'::jsonb)) > 131072 then
+    raise exception 'carrito_invalido';
+  end if;
+
   if public.is_premium_user(new.user_id) then
     return new;
   end if;
@@ -620,6 +680,10 @@ begin
     raise exception 'no_autorizado';
   end if;
 
+  if p_signature is not null and length(p_signature) > 4096 then
+    raise exception 'firma_invalida';
+  end if;
+
   if public.is_premium_user(p_user_id) then
     return jsonb_build_object('allowed', true, 'premium', true, 'count', 0, 'limit', v_limit);
   end if;
@@ -667,4 +731,93 @@ $$;
 -- reseteaba solo con abrir una ventana de incógnito. Ahora "Comparar ahora"
 -- pide cuenta: es la única forma de tener una cuota que valga algo.
 grant execute on function public.register_compare_use(uuid, integer, text) to authenticated;
+revoke all on function public.register_compare_use(uuid, integer, text) from public, anon;
 
+-- Límite compartido entre instancias serverless para las rutas públicas.
+-- El servidor manda un HMAC del scope e IP, no el IP en claro.
+create table if not exists public.api_rate_limits (
+  key_hash text not null,
+  window_start timestamptz not null,
+  hits integer not null default 0,
+  primary key (key_hash, window_start)
+);
+alter table public.api_rate_limits enable row level security;
+
+create or replace function public.consume_api_rate_limit(
+  p_key_hash text,
+  p_max_requests integer,
+  p_window_seconds integer default 60
+)
+returns boolean
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_window timestamptz;
+  v_hits integer;
+begin
+  if p_key_hash is null or p_key_hash !~ '^[a-f0-9]{64}$'
+     or p_max_requests is null or p_max_requests < 1 or p_max_requests > 10000
+     or p_window_seconds is null or p_window_seconds < 1 or p_window_seconds > 3600 then
+    return false;
+  end if;
+
+  v_window := to_timestamp(floor(extract(epoch from now()) / p_window_seconds) * p_window_seconds);
+
+  insert into public.api_rate_limits(key_hash, window_start, hits)
+  values (p_key_hash, v_window, 1)
+  on conflict (key_hash, window_start) do update
+    set hits = public.api_rate_limits.hits + 1
+  returning hits into v_hits;
+
+  -- Limpieza ocasional para que los identificadores temporales no crezcan sin límite.
+  if random() < 0.01 then
+    delete from public.api_rate_limits where window_start < now() - interval '1 day';
+  end if;
+
+  return v_hits <= p_max_requests;
+end;
+$$;
+revoke all on function public.consume_api_rate_limit(text, integer, integer) from public, anon, authenticated;
+grant execute on function public.consume_api_rate_limit(text, integer, integer) to service_role;
+
+-- Limita el tamaño de la cola que recorre el cron. Un visitante puede pedir
+-- el historial de productos públicos, pero no agregar EAN infinitos.
+create or replace function public.track_product_limited(p_ean text, p_nombre text default null)
+returns boolean
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_total integer;
+begin
+  if p_ean is null or p_ean !~ '^\d{4,20}$'
+     or (p_nombre is not null and length(p_nombre) > 200) then
+    return false;
+  end if;
+
+  update public.tracked_products
+     set nombre = coalesce(p_nombre, nombre), last_seen_at = now()
+   where ean = p_ean;
+  if found then return true; end if;
+
+  -- Solo nuevas claves serializan entre sí para que pedidos simultáneos no
+  -- excedan el tope. La segunda comprobación cubre la carrera del mismo EAN.
+  perform pg_advisory_xact_lock(hashtextextended('tracked-products-cap', 0));
+  update public.tracked_products
+     set nombre = coalesce(p_nombre, nombre), last_seen_at = now()
+   where ean = p_ean;
+  if found then return true; end if;
+
+  select count(*) into v_total from public.tracked_products;
+  if v_total >= 2000 then return false; end if;
+
+  insert into public.tracked_products(ean, nombre, last_seen_at)
+  values (p_ean, p_nombre, now());
+  return true;
+end;
+$$;
+revoke all on function public.track_product_limited(text, text) from public, anon, authenticated;
+grant execute on function public.track_product_limited(text, text) to service_role;

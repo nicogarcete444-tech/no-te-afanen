@@ -1,14 +1,10 @@
 // Utilidades compartidas por las rutas de /app/api/* para no repetir la
 // misma validación/rate-limit en cada endpoint.
 //
-// Nota sobre el rate limit: al correr en funciones serverless (Vercel), cada
-// instancia tiene su propia memoria, así que esto NO es un límite global
-// estricto (un atacante distribuido podría esquivarlo pegándole a distintas
-// instancias). Aun así frena de forma efectiva el abuso más común (un
-// script pegándole en loop desde una sola conexión) y no depende de
-// infraestructura extra. Si en algún momento hace falta un límite global
-// real, lo ideal es sumar Upstash Ratelimit o el rate limiting nativo de
-// Vercel Firewall.
+// Mantiene un límite local de respaldo y otro compartido por Supabase para
+// que las instancias serverless cuenten las solicitudes en conjunto.
+import { createHmac } from 'node:crypto';
+import { createAdminClient } from '@/lib/supabase/admin';
 const WINDOW_MS = 60_000;
 
 // Tope por defecto (rutas que el usuario dispara de a una: alta premium,
@@ -42,19 +38,50 @@ function cleanup(now: number) {
 }
 
 export function getClientIp(request: Request): string {
+  // En plataformas que terminan TLS antes de la app, el último salto de
+  // X-Forwarded-For es el proxy confiable; el primero lo puede elegir el cliente.
+  const real = request.headers.get('x-vercel-forwarded-for') || request.headers.get('x-real-ip');
+  if (real) return real.split(',').at(-1)?.trim() || 'unknown';
   const fwd = request.headers.get('x-forwarded-for');
-  if (fwd) return fwd.split(',')[0].trim();
-  return request.headers.get('x-real-ip') || 'unknown';
+  return fwd?.split(',').at(-1)?.trim() || 'unknown';
 }
 
 // Devuelve true si YA se pasó del límite (o sea: hay que cortar la request).
-export function isRateLimited(key: string, max: number = MAX_REQUESTS_PER_WINDOW): boolean {
+function isLocallyRateLimited(key: string, max: number): boolean {
   const now = Date.now();
   cleanup(now);
   const timestamps = (hits.get(key) || []).filter((t) => now - t < WINDOW_MS);
   timestamps.push(now);
   hits.set(key, timestamps);
   return timestamps.length > max;
+}
+
+export async function isRateLimited(
+  request: Request,
+  scope: string,
+  max: number = MAX_REQUESTS_PER_WINDOW
+): Promise<boolean> {
+  const ip = getClientIp(request);
+  const key = `${scope}:${ip}`;
+  if (isLocallyRateLimited(key, max)) return true;
+
+  const secret = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const admin = createAdminClient();
+  // Do not silently degrade to per-process counters in production: serverless
+  // instances do not share the in-memory fallback.
+  if (!secret || !admin) return process.env.NODE_ENV === 'production';
+
+  const keyHash = createHmac('sha256', secret).update(key).digest('hex');
+  const { data, error } = await admin.rpc('consume_api_rate_limit', {
+    p_key_hash: keyHash,
+    p_max_requests: max,
+    p_window_seconds: Math.ceil(WINDOW_MS / 1000),
+  });
+  if (error) {
+    console.error('[api-rate-limit] shared limiter unavailable:', error.message);
+    return true;
+  }
+  return data !== true;
 }
 
 // --- Validación de parámetros que llegan de la URL (siempre son texto) ---

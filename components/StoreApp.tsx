@@ -229,6 +229,7 @@ export default function StoreApp({
   // primer pintado, y el efecto de abajo sincroniza este estado con eso.
   const [theme, setTheme] = useState<Theme>('light');
   const [cartLoaded, setCartLoaded] = useState(false);
+  const [cartCanSave, setCartCanSave] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [syncError, setSyncError] = useState(false);
   const [scrolled, setScrolled] = useState(false);
@@ -431,11 +432,11 @@ export default function StoreApp({
         if (cancelled) return;
         setSelected(stored.items);
         setLiveProducts(stored.liveProducts);
+        setCartCanSave(true);
       })
       .catch(() => {
-        // Si Supabase no responde (red caída, sesión vencida, lo que sea),
-        // no dejamos a la persona mirando "Cargando tu carrito..." para
-        // siempre: arrancamos con el carrito vacío en vez de trabarnos.
+        // No reemplazar ni guardar un carrito vacío si la lectura remota falló.
+        if (!cancelled) setSyncError(true);
       })
       .finally(() => {
         if (!cancelled) setCartLoaded(true);
@@ -687,7 +688,7 @@ export default function StoreApp({
   // corre hasta que terminó de cargar el carrito inicial, para no pisar lo
   // que ya estaba guardado con un carrito vacío apenas monta el componente.
   useEffect(() => {
-    if (!cartLoaded) return;
+    if (!cartLoaded || !cartCanSave) return;
     if (saveDebounce.current) clearTimeout(saveDebounce.current);
     saveDebounce.current = setTimeout(async () => {
       setSyncing(true);
@@ -706,7 +707,7 @@ export default function StoreApp({
     return () => {
       if (saveDebounce.current) clearTimeout(saveDebounce.current);
     };
-  }, [selected, liveProducts, cartLoaded, userId]);
+  }, [selected, liveProducts, cartLoaded, cartCanSave, userId]);
 
   // búsqueda en vivo contra Precios Claros (vía nuestro proxy /api/productos)
   useEffect(() => {
@@ -1402,6 +1403,7 @@ export default function StoreApp({
               {Object.keys(sharedCartOffer.items).length} producto
               {Object.keys(sharedCartOffer.items).length === 1 ? '' : 's'} · se suman al tuyo, no lo reemplazan
             </span>
+            <span>El enlace permite ver los productos y cantidades a quien lo tenga.</span>
           </div>
           <div className="shared-cart-banner-actions">
             <button className="shared-cart-banner-accept" onClick={handleAcceptSharedCart}>Sumar al carrito</button>
@@ -1453,7 +1455,7 @@ export default function StoreApp({
         )}
 
         {syncError ? (
-          <div className="sync-note">No se pudo guardar el carrito ahora — vamos a reintentar solo.</div>
+          <div className="sync-note">{cartCanSave ? 'No se pudo guardar el carrito ahora — vamos a reintentar solo.' : 'No se pudo cargar el carrito. Para proteger tus datos no guardaremos cambios; recargá la página para reintentar.'}</div>
         ) : syncing ? (
           <div className="sync-note">Guardando carrito...</div>
         ) : null}

@@ -68,6 +68,7 @@ function PriceHistoryChart({ history }: { history: PricePoint[] }) {
           {pctChange === 0 ? 'sin cambios' : `${pctChange > 0 ? '+' : ''}${pctChange}%`}
         </span>
       </div>
+      <p className="pd-history-range">Referencia de sucursales cercanas al Obelisco (CABA); puede no representar tu zona.</p>
       <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} className="pd-history-svg">
         <polyline points={points.join(' ')} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
       </svg>

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getClientIp, isRateLimited, RATE_LIMITS } from '@/lib/apiSecurity';
+import { isRateLimited, RATE_LIMITS } from '@/lib/apiSecurity';
 import { fetchWithTimeout } from '@/lib/fetchWithTimeout';
 
 // Con hasta MAX_EANS productos por pedido y (antes) hasta 4 llamadas
@@ -72,7 +72,7 @@ const VTEX_STORES_2 = [
   'www.hiperlibertad.com.ar',
 ];
 
-const MAX_EANS = 60;
+const MAX_EANS = 20;
 const CACHE_SECONDS = 60 * 60 * 24 * 30; // foto encontrada: un mes
 const MISS_CACHE_SECONDS = 60 * 60 * 24; // "ninguna fuente la tiene": un día
 const PENDING_CACHE_SECONDS = 60; // alguna fuente falló: que se reintente pronto
@@ -82,7 +82,8 @@ const PROVIDER_REVALIDATE = 60 * 60 * 24 * 3;
 // Tiempo máximo total del pedido (la función corta a los 25s).
 const TOTAL_BUDGET_MS = 20_000;
 const PER_CALL_TIMEOUT_MS = 4_000;
-const MAX_CONCURRENT_CALLS = 40;
+const MAX_CONCURRENT_CALLS = 12;
+const MAX_PROBES_PER_REQUEST = 100;
 
 // Open Food Facts pide identificarse. Sin esto, los pedidos anónimos entran
 // en la cola lenta o directamente se rechazan.
@@ -342,7 +343,7 @@ async function resolveOne(
 }
 
 export async function GET(request: NextRequest) {
-  if (isRateLimited('imagenes:' + getClientIp(request), RATE_LIMITS.imagenes)) {
+  if (await isRateLimited(request, 'imagenes', RATE_LIMITS.imagenes)) {
     return NextResponse.json({ error: 'Demasiados pedidos. Esperá un momento.' }, { status: 429 });
   }
 
@@ -350,8 +351,13 @@ export async function GET(request: NextRequest) {
   // es opcional: cada nombre va con encodeURIComponent individual (así una
   // coma dentro de un nombre no rompe el separador), así que se decodifica
   // por segmento antes de usarlo.
-  const rawEans = (request.nextUrl.searchParams.get('eans') || '').split(',').map((e) => e.trim());
-  const rawNames = (request.nextUrl.searchParams.get('names') || '').split(',');
+  const eansParam = request.nextUrl.searchParams.get('eans') || '';
+  const namesParam = request.nextUrl.searchParams.get('names') || '';
+  if (eansParam.length > 512 || namesParam.length > 10000) {
+    return NextResponse.json({ error: 'La consulta supera el tamaño permitido.' }, { status: 400 });
+  }
+  const rawEans = eansParam.split(',').map((e) => e.trim());
+  const rawNames = namesParam.split(',');
 
   const nameByEan = new Map<string, string>();
   rawEans.forEach((ean, i) => {
@@ -359,7 +365,7 @@ export async function GET(request: NextRequest) {
     const raw = rawNames[i];
     if (!raw) return;
     try {
-      const decoded = decodeURIComponent(raw).trim();
+      const decoded = decodeURIComponent(raw).trim().slice(0, 120);
       if (decoded) nameByEan.set(ean, decoded);
     } catch {
       // nombre mal codificado: seguimos sin él, no es motivo para cortar todo
@@ -374,10 +380,16 @@ export async function GET(request: NextRequest) {
 
   const deadline = Date.now() + TOTAL_BUDGET_MS;
   const limit = createLimiter(MAX_CONCURRENT_CALLS);
+  let probes = 0;
+  const budgetedLimit = <T>(fn: () => Promise<T>) => {
+    if (probes >= MAX_PROBES_PER_REQUEST) return Promise.resolve(ERROR as unknown as T);
+    probes++;
+    return limit(fn);
+  };
 
   // Los productos van en paralelo entre sí; cada uno recorre sus niveles en
   // orden.
-  const results = await Promise.all(eans.map((ean) => resolveOne(ean, nameByEan.get(ean), deadline, limit)));
+  const results = await Promise.all(eans.map((ean) => resolveOne(ean, nameByEan.get(ean), deadline, budgetedLimit)));
 
   const imagenes: Record<string, string | null> = {};
   const pendientes: string[] = [];

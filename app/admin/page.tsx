@@ -26,6 +26,24 @@ type AuthUserRow = {
   last_sign_in_at: string | null;
 };
 
+async function readAllPages<T>(
+  fetchPage: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: unknown }>
+) {
+  const rows: T[] = [];
+  let incomplete = false;
+  for (let page = 0; page < 100; page++) {
+    const { data, error } = await fetchPage(page * 1000, page * 1000 + 999);
+    if (error || !data) {
+      incomplete = true;
+      break;
+    }
+    rows.push(...(data as T[]));
+    if (data.length < 1000) return { rows, incomplete };
+  }
+  if (rows.length >= 100_000) incomplete = true;
+  return { rows, incomplete };
+}
+
 function daysAgo(iso: string | null): number | null {
   if (!iso) return null;
   const diffMs = Date.now() - new Date(iso).getTime();
@@ -64,9 +82,13 @@ export default async function AdminPage() {
   // listUsers pagina de a 1000; con el volumen de esta app un par de
   // vueltas alcanza siempre, pero el while cubre igual si algún día crece.
   const authUsers: AuthUserRow[] = [];
+  let dataIncomplete = false;
   for (let page = 1; page <= 20; page++) {
     const { data, error } = await admin.auth.admin.listUsers({ page, perPage: 1000 });
-    if (error || !data) break;
+    if (error || !data) {
+      dataIncomplete = true;
+      break;
+    }
     authUsers.push(
       ...data.users.map((u) => ({
         id: u.id,
@@ -76,20 +98,22 @@ export default async function AdminPage() {
       }))
     );
     if (data.users.length < 1000) break;
+    if (page === 20) dataIncomplete = true;
   }
 
-  // --- El resto de las tablas, todas de una ------------------------------
-  const [
-    { data: premiumRows },
-    { data: cartRows },
-    { data: alertRows },
-    { data: compareRows },
-  ] = await Promise.all([
-    admin.from('premium_status').select('user_id, is_premium, since, premium_until'),
-    admin.from('carts').select('user_id, items'),
-    admin.from('price_alerts').select('user_id'),
-    admin.from('compare_usage').select('user_id, count'),
+  // Las respuestas de PostgREST están paginadas; leer todas las páginas evita
+  // que los agregados del panel queden limitados silenciosamente a las primeras filas.
+  const [premiumPage, cartPage, alertPage, comparePage] = await Promise.all([
+    readAllPages<{ user_id: string; is_premium: boolean; since: string | null; premium_until: string | null }>((from, to) => admin.from('premium_status').select('user_id, is_premium, since, premium_until').range(from, to)),
+    readAllPages<{ user_id: string; items: Record<string, number> | null }>((from, to) => admin.from('carts').select('user_id, items').range(from, to)),
+    readAllPages<{ user_id: string }>((from, to) => admin.from('price_alerts').select('user_id').range(from, to)),
+    readAllPages<{ user_id: string; count: number | null }>((from, to) => admin.from('compare_usage').select('user_id, count').range(from, to)),
   ]);
+  const premiumRows = premiumPage.rows;
+  const cartRows = cartPage.rows;
+  const alertRows = alertPage.rows;
+  const compareRows = comparePage.rows;
+  dataIncomplete ||= premiumPage.incomplete || cartPage.incomplete || alertPage.incomplete || comparePage.incomplete;
 
   const premiumByUser = new Map((premiumRows ?? []).map((r) => [r.user_id as string, r]));
 
@@ -173,6 +197,7 @@ export default async function AdminPage() {
       <p style={{ fontSize: 13, color: 'var(--ink-soft)', marginBottom: 24 }}>
         {user?.email} — datos en vivo, no se guardan acá.
       </p>
+      {dataIncomplete && <p role="status">Algunos datos no se pudieron leer completos; los totales del panel pueden estar incompletos.</p>}
 
       <div className="admin-stats-grid">
         <div className="admin-stat-card">
