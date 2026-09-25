@@ -499,9 +499,15 @@ export default function Header({
                           </div>
                           <div className="account-head-text">
                             <div className="account-head-title">{userEmail}</div>
-                            <div className="account-head-sub">{premium ? 'Plan Premium' : 'Plan free'}</div>
+                            <div className="account-head-sub">
+                              {premium ? 'Plan Premium' : 'Plan free'}
+                              <span className="account-head-sub-dot" aria-hidden="true">·</span>
+                              Ver perfil
+                            </div>
                           </div>
-                          <Chevron />
+                          <span className="account-head-chevron" aria-hidden="true">
+                            <Chevron />
+                          </span>
                         </button>
                       ) : (
                         <div className="account-head">
@@ -535,10 +541,12 @@ export default function Header({
                         <div className="account-rows">
                           {premium ? (
                             <div className="account-premium-badge">
-                              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round">
-                                <path d="M20 6L9 17l-5-5" />
-                              </svg>
-                              Ya sos Premium
+                              <span className="account-row-icon account-row-icon-check">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.6} strokeLinecap="round" strokeLinejoin="round">
+                                  <path d="M20 6L9 17l-5-5" />
+                                </svg>
+                              </span>
+                              <span>Ya sos Premium</span>
                             </div>
                           ) : (
                             <button
@@ -640,8 +648,8 @@ function Chevron() {
 
 function AccountIcon({ name }: { name: 'premium' | 'ahorros' | 'notificaciones' | 'legal' | 'admin' | 'salir' | 'cuenta' | 'tema' | 'eliminar' }) {
   const common = {
-    width: 17,
-    height: 17,
+    width: 16,
+    height: 16,
     viewBox: '0 0 24 24',
     fill: 'none' as const,
     stroke: 'currentColor',
@@ -649,66 +657,72 @@ function AccountIcon({ name }: { name: 'premium' | 'ahorros' | 'notificaciones' 
     strokeLinecap: 'round' as const,
     strokeLinejoin: 'round' as const,
   };
-  switch (name) {
-    case 'premium':
-      return (
-        <svg {...common}>
-          <path d="m12 3 2.6 5.5 6 .85-4.35 4.2 1.05 5.95L12 16.7 6.7 19.5l1.05-5.95L3.4 9.35l6-.85z" />
-        </svg>
-      );
-    case 'ahorros':
-      return (
-        <svg {...common}>
-          <path d="M3 17.5 9 11l4 3.5 8-8.5" />
-          <path d="M15 6h6v6" />
-        </svg>
-      );
-    case 'notificaciones':
-      return (
-        <svg {...common}>
-          <path d="M18 8a6 6 0 0 0-12 0c0 4.5-1.5 6-2 7h16c-.5-1-2-2.5-2-7Z" />
-          <path d="M10 20a2 2 0 0 0 4 0" />
-        </svg>
-      );
-    case 'legal':
-      return (
-        <svg {...common}>
-          <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" />
-          <path d="M14 3v5h5M9 13h6M9 17h4" />
-        </svg>
-      );
-    case 'admin':
-      return (
-        <svg {...common}>
-          <path d="M12 3 4 6.5v5c0 4.6 3.2 8.5 8 9.5 4.8-1 8-4.9 8-9.5v-5z" />
-        </svg>
-      );
-    case 'cuenta':
-      return (
-        <svg {...common}>
-          <circle cx="12" cy="8" r="3.4" />
-          <path d="M4.5 20c1.4-3.8 4.4-5.7 7.5-5.7s6.1 1.9 7.5 5.7" />
-        </svg>
-      );
-    case 'salir':
-      return (
-        <svg {...common}>
-          <path d="M15 17v1.5a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5.5a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2V7" />
-          <path d="M19 12H9m10 0-3-3m3 3-3 3" />
-        </svg>
-      );
-    case 'tema':
-      return (
-        <svg {...common}>
-          <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" />
-        </svg>
-      );
-    case 'eliminar':
-      return (
-        <svg {...common}>
-          <path d="M4 7h16M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2m-9 0 1 13a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-13" />
-          <path d="M10 11v7M14 11v7" />
-        </svg>
-      );
-  }
+  const path = (() => {
+    switch (name) {
+      case 'premium':
+        return (
+          <svg {...common}>
+            <path d="m12 3 2.6 5.5 6 .85-4.35 4.2 1.05 5.95L12 16.7 6.7 19.5l1.05-5.95L3.4 9.35l6-.85z" />
+          </svg>
+        );
+      case 'ahorros':
+        return (
+          <svg {...common}>
+            <path d="M3 17.5 9 11l4 3.5 8-8.5" />
+            <path d="M15 6h6v6" />
+          </svg>
+        );
+      case 'notificaciones':
+        return (
+          <svg {...common}>
+            <path d="M18 8a6 6 0 0 0-12 0c0 4.5-1.5 6-2 7h16c-.5-1-2-2.5-2-7Z" />
+            <path d="M10 20a2 2 0 0 0 4 0" />
+          </svg>
+        );
+      case 'legal':
+        return (
+          <svg {...common}>
+            <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" />
+            <path d="M14 3v5h5M9 13h6M9 17h4" />
+          </svg>
+        );
+      case 'admin':
+        return (
+          <svg {...common}>
+            <path d="M12 3 4 6.5v5c0 4.6 3.2 8.5 8 9.5 4.8-1 8-4.9 8-9.5v-5z" />
+          </svg>
+        );
+      case 'cuenta':
+        return (
+          <svg {...common}>
+            <circle cx="12" cy="8" r="3.4" />
+            <path d="M4.5 20c1.4-3.8 4.4-5.7 7.5-5.7s6.1 1.9 7.5 5.7" />
+          </svg>
+        );
+      case 'salir':
+        return (
+          <svg {...common}>
+            <path d="M15 17v1.5a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5.5a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2V7" />
+            <path d="M19 12H9m10 0-3-3m3 3-3 3" />
+          </svg>
+        );
+      case 'tema':
+        return (
+          <svg {...common}>
+            <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" />
+          </svg>
+        );
+      case 'eliminar':
+        return (
+          <svg {...common}>
+            <path d="M4 7h16M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2m-9 0 1 13a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-13" />
+            <path d="M10 11v7M14 11v7" />
+          </svg>
+        );
+    }
+  })();
+
+  // Chip circular detrás del ícono: separa mejor cada fila de la lista y da
+  // una jerarquía más clara que el ícono "pelado" de antes.
+  return <span className={`account-row-icon account-row-icon-${name}`}>{path}</span>;
 }

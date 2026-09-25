@@ -861,16 +861,16 @@
 .auth-brand .brand-icon{width:38px;height:38px;border-radius:12px;}
 .auth-brand-name{font-family:var(--font-archivo),sans-serif;font-weight:800;font-size:15px;letter-spacing:-0.03em;}
 
-/* panel de ilustración: caja redondeada con lavado de acento detrás del
-   dibujo, como en las apps de referencia (Ualá/Mercado Pago), sin llegar a
-   ser un fondo violeta sólido para no perder el sistema neutro del resto
-   de la app. */
+/* panel de ilustración: caja redondeada que encuadra la imagen a pantalla
+   completa (cover). La imagen ya trae su propio fondo lila y esquinas
+   redondeadas "pintadas", así que el panel solo la recorta prolijo, sin
+   segundo fondo ni padding que la achique. */
 .auth-illustration-panel{
-  background:var(--accent-wash);border-radius:var(--r-lg);
-  padding:14px 10px 4px;margin-bottom:20px;height:168px;
-  display:flex;align-items:flex-end;justify-content:center;overflow:hidden;
+  border-radius:var(--r-lg);
+  margin-bottom:20px;height:168px;
+  overflow:hidden;
 }
-.auth-illustration-panel svg{width:100%;height:100%;max-width:240px;}
+.auth-illustration-panel img{width:100%;height:100%;object-fit:cover;display:block;}
 
 .auth-title{font-size:23px;margin-bottom:6px;}
 .auth-title-center{text-align:center;}
@@ -981,18 +981,17 @@
 .account-panel{
   position:absolute;top:calc(100% + 10px);right:0;z-index:71;
   background:var(--surface);border:1px solid var(--line);
-  border-radius:var(--r-lg);padding:8px;min-width:270px;
+  border-radius:var(--r-lg);padding:10px;min-width:280px;
   box-shadow:var(--shadow-md);
   animation:fadeUp .16s ease both;
 }
 .account-panel-grip{display:none;}
 
 .account-head{
-  display:flex;align-items:center;gap:12px;padding:10px 10px 14px;
-  border-bottom:1px solid var(--line);margin-bottom:6px;
+  display:flex;align-items:center;gap:12px;padding:12px;
 }
 .account-avatar{
-  width:38px;height:38px;border-radius:50%;flex-shrink:0;
+  width:40px;height:40px;border-radius:50%;flex-shrink:0;
   display:flex;align-items:center;justify-content:center;
   background:var(--ink);color:var(--bg);
   font-family:var(--font-archivo),sans-serif;font-weight:800;font-size:16px;
@@ -1003,18 +1002,33 @@
   font-size:13.5px;font-weight:700;color:var(--ink);
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
 }
-.account-head-sub{font-size:11.5px;color:var(--ink-soft);margin-top:2px;}
+.account-head-sub{
+  display:flex;align-items:center;gap:5px;
+  font-size:11.5px;color:var(--ink-soft);margin-top:2px;
+}
+.account-head-sub-dot{color:var(--ink-faint);}
 
 /* el encabezado (avatar + mail) ahora es tocable: entra a "Tu perfil".
-   Mismo look que .account-head pero como <button>, con flecha a la
-   derecha para que se note que abre algo. */
+   Se separa del resto de la lista como una tarjeta propia (fondo + borde
+   + esquinas redondeadas) para que quede claro de un vistazo que es un
+   bloque distinto y tocable, no una fila más del menú. El texto "Ver
+   perfil" y el chip con la flecha refuerzan que ahí adentro hay más. */
 .account-head-button{
-  width:100%;background:none;border:none;cursor:pointer;text-align:left;
-  border-radius:var(--r-sm);transition:background .12s ease;
+  width:100%;display:flex;align-items:center;gap:12px;text-align:left;
+  background:var(--surface-2);border:1px solid var(--line);cursor:pointer;
+  border-radius:var(--r-md);margin-bottom:10px;
+  transition:background .12s ease, border-color .12s ease, transform .1s ease;
 }
-.account-head-button:hover{background:var(--surface-2);}
-.account-head-button .account-row-chevron{flex-shrink:0;}
-.account-head-static{border-bottom:none;padding-bottom:4px;}
+.account-head-button:hover{background:var(--chip-bg);border-color:var(--line-strong);}
+.account-head-button:active{transform:scale(.99);}
+.account-head-chevron{
+  flex-shrink:0;width:26px;height:26px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  background:var(--surface);color:var(--ink-soft);
+  box-shadow:inset 0 0 0 1px var(--line);
+}
+.account-head-button:hover .account-head-chevron{color:var(--ink);}
+.account-head-static{padding:6px 12px 16px;border-bottom:1px solid var(--line);margin-bottom:6px;}
 
 /* --- "Tu perfil": sub-pantalla dentro del mismo panel --- */
 .account-profile-topbar{
@@ -1038,26 +1052,45 @@
 .account-delete-confirm-btn{background:var(--up);color:#fff;}
 .account-delete-confirm-btn:hover{opacity:.88;}
 
-.account-rows{display:flex;flex-direction:column;gap:2px;}
+/* Lista "agrupada" tipo Ajustes de iOS / Mercado Pago / Ualá: en vez de
+   filas sueltas con separación entre ellas, cada sección es UNA tarjeta
+   gris con las filas adentro separadas por líneas finas. Es el patrón que
+   usan casi todas las apps grandes para menús de cuenta — más compacto,
+   más prolijo, y agrupa visualmente lo que está relacionado. */
+.account-rows{
+  display:flex;flex-direction:column;
+  background:var(--surface-2);border-radius:var(--r-md);
+  overflow:hidden;margin-bottom:10px;
+}
 .account-row{
   display:flex;align-items:center;gap:12px;width:100%;
-  background:none;border:none;border-radius:var(--r-sm);
-  padding:12px 10px;cursor:pointer;text-align:left;text-decoration:none;
+  background:none;border:none;border-radius:0;
+  padding:11px 12px;cursor:pointer;text-align:left;text-decoration:none;
   font-family:var(--font-inter),sans-serif;font-size:14px;font-weight:600;color:var(--ink);
   transition:background .12s ease;
 }
+.account-row + .account-row,
+.account-rows > .account-premium-badge + .account-row,
+.account-row + .account-premium-badge{border-top:1px solid var(--line);}
 .account-row span{flex:1;min-width:0;}
-.account-row svg{flex-shrink:0;color:var(--ink-soft);}
-.account-row-chevron{color:var(--ink-faint) !important;}
-.account-row:hover{background:var(--surface-2);}
+.account-row-chevron{color:var(--ink-faint) !important;flex-shrink:0;}
+.account-row:hover{background:var(--surface);}
 .account-row-accent{color:var(--accent);}
-.account-row-accent svg{color:var(--accent);}
 .account-row-danger{color:var(--up);}
-.account-row-danger svg{color:var(--up);}
+
+/* chip circular detrás de cada ícono de fila: separa mejor el ícono del
+   texto y le da más jerarquía a la lista que un ícono "pelado". */
+.account-row-icon{
+  flex-shrink:0;width:30px;height:30px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  background:var(--surface);color:var(--ink-soft);
+}
+.account-row-accent .account-row-icon{background:var(--accent-wash);color:var(--accent);}
+.account-row-danger .account-row-icon{background:color-mix(in srgb, var(--up) 14%, transparent);color:var(--up);}
 
 .account-section-label{
   font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;
-  color:var(--ink-faint);padding:10px 10px 4px;
+  color:var(--ink-faint);padding:4px 6px 8px;
 }
 
 .account-row-switch{cursor:default;}
@@ -1076,10 +1109,10 @@
 .theme-switch.is-on .theme-switch-knob{transform:translateX(16px);}
 
 .account-premium-badge{
-  display:flex;align-items:center;gap:8px;padding:12px 10px;border-radius:var(--r-sm);
-  font-size:13.5px;font-weight:700;color:var(--down);background:var(--down-wash);margin-bottom:2px;
+  display:flex;align-items:center;gap:12px;padding:11px 12px;
+  font-size:14px;font-weight:600;color:var(--down);
 }
-.account-premium-badge svg{flex-shrink:0;}
+.account-row-icon-check{background:var(--down-wash);color:var(--down);}
 
 /* Contador de bajadas de precio sin leer, en la fila "Bajadas de precio"
    del menú de cuenta (antes vivía como globito sobre la campana suelta en
@@ -1137,8 +1170,10 @@
     display:block;width:38px;height:4px;border-radius:999px;
     background:var(--line-strong);margin:8px auto 6px;
   }
-  .account-row{padding:15px 8px;font-size:15px;}
-  .account-head{padding:8px 8px 16px;}
+  .account-row{padding:14px 8px;font-size:15px;}
+  .account-row-icon{width:34px;height:34px;}
+  .account-head-button{padding:14px;}
+  .account-head-static{padding:6px 8px 16px;}
 }
 @keyframes sheetUp{from{transform:translateY(100%);}to{transform:translateY(0);}}
 
@@ -1158,11 +1193,8 @@
   padding:6px 8px;border-radius:8px;
 }
 
-.account-premium-badge{
-  display:flex;align-items:center;gap:6px;padding:8px 10px;border-radius:8px;font-size:12px;font-weight:700;
-  color:var(--best-text);background:var(--best-bg);margin:2px 0 4px;
-}
-.account-premium-badge svg{flex-shrink:0;}
+.account-premium-badge{color:var(--best-text);}
+.account-row-icon-check{background:var(--best-bg);color:var(--best-text);}
 
 /* --- modal Premium --- */
 .premium-status{
@@ -1430,13 +1462,20 @@
 }
 .price-freshness-refresh:disabled{color:var(--ink-faint);cursor:default;text-decoration:none;}
 
-/* --- hojas: overlay real y ancho contenido en escritorio --- */
+/* --- hojas: overlay real siempre; ancho contenido y esquinas
+   redondeadas SOLO en pantallas anchas. En mobile la hoja es pantalla
+   completa (inset:0, toca el borde superior real), así que redondear ahí
+   corta un triangulito en cada esquina que deja ver el overlay oscuro de
+   fondo — se ve como una mancha negra pegada al borde. En escritorio la
+   hoja queda centrada con aire alrededor, ahí sí tiene sentido redondear. */
 .cart-overlay{background:rgba(21,21,26,.35);}
-.cart-sheet{
-  max-width:600px;margin:0 auto;left:0;right:0;
-  border-radius:var(--r-xl) var(--r-xl) 0 0;
+@media (min-width:600px){
+  .cart-sheet{
+    max-width:600px;margin:0 auto;left:0;right:0;
+    border-radius:var(--r-xl) var(--r-xl) 0 0;
+  }
+  .pd-sheet{max-width:600px;margin:0 auto;left:0;right:0;}
 }
-.pd-sheet{max-width:600px;margin:0 auto;left:0;right:0;}
 
 /* --- modal Premium --- */
 .premium-table{width:100%;border-collapse:collapse;margin-top:14px;font-size:12.5px;}

@@ -5,58 +5,18 @@ import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { getPasswordChecks, getPasswordStrength, meetsPasswordPolicy } from '@/lib/passwordStrength';
 
-// Ilustración de la pantalla de acceso: una persona comparando precios con
-// una lupa sobre una etiqueta de descuento. Elegida en vez de un ícono
-// genérico de "finanzas" (billete, alcancía) porque la app no es una
-// billetera: es un comparador de precios, y la lupa + etiqueta cuentan esa
-// historia sin necesitar texto.
+// Ilustración de la pantalla de acceso: alguien guardando una moneda en una
+// alcancía, la idea de "ahorro" bien directa. Es una imagen (no SVG dibujado
+// a mano) que ya trae su propio fondo lila, así que el panel la muestra a
+// pantalla completa (cover) en vez de flotarla sobre un segundo fondo.
 function AuthIllustration() {
   return (
-    <svg viewBox="0 0 280 200" width="100%" height="100%" role="img" aria-hidden="true">
-      <ellipse cx="140" cy="176" rx="86" ry="10" fill="var(--line)" opacity="0.5" />
-
-      {/* etiqueta de descuento gigante, de fondo */}
-      <g transform="translate(150 46) rotate(8)">
-        <rect x="0" y="0" width="104" height="104" rx="18" fill="var(--accent-wash)" stroke="var(--accent-soft)" strokeWidth="2.5" />
-        <circle cx="24" cy="24" r="7" fill="var(--surface)" stroke="var(--accent-soft)" strokeWidth="2.5" />
-        <text x="52" y="66" textAnchor="middle" fontSize="34" fontWeight="800" fill="var(--accent)" fontFamily="var(--font-archivo), sans-serif">%</text>
-      </g>
-
-      {/* chispas decorativas */}
-      <circle cx="60" cy="40" r="5" fill="var(--gold)" opacity="0.55" />
-      <circle cx="245" cy="70" r="4" fill="var(--down)" opacity="0.5" />
-      <circle cx="228" cy="150" r="6" fill="var(--accent-soft)" opacity="0.4" />
-
-      {/* carrito chico, marca de la app, apoyado en el piso */}
-      <g transform="translate(30 148)">
-        <path d="M0 0h6l4.4 24a5 5 0 0 0 5 4.2h19a5 5 0 0 0 5-4h5.4" fill="none" stroke="var(--ink-faint)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-        <circle cx="15" cy="34" r="3.2" fill="var(--ink-faint)" />
-        <circle cx="30" cy="34" r="3.2" fill="var(--ink-faint)" />
-      </g>
-
-      {/* personaje */}
-      <g transform="translate(58 62)">
-        {/* piernas */}
-        <rect x="14" y="86" width="14" height="34" rx="6" fill="var(--ink)" />
-        <rect x="34" y="86" width="14" height="34" rx="6" fill="var(--ink)" />
-        {/* torso */}
-        <path d="M8 46a24 24 0 0 1 48 0v38a8 8 0 0 1-8 8H16a8 8 0 0 1-8-8Z" fill="var(--accent)" />
-        {/* brazo bajo */}
-        <rect x="46" y="52" width="12" height="30" rx="6" fill="var(--accent)" />
-        {/* cabeza */}
-        <circle cx="32" cy="20" r="20" fill="#F2C9A0" />
-        <path d="M12 18a20 20 0 0 1 40 0c-6-4-10-10-20-10s-14 6-20 10Z" fill="var(--ink)" />
-        <circle cx="25" cy="21" r="1.8" fill="var(--ink)" />
-        <circle cx="38" cy="21" r="1.8" fill="var(--ink)" />
-        <path d="M25 28q7 5 14 0" stroke="var(--ink)" strokeWidth="2" fill="none" strokeLinecap="round" />
-        {/* brazo con lupa, por encima de la cabeza y la etiqueta */}
-        <path d="M50 60c14-6 26-18 34-30" stroke="var(--accent)" strokeWidth="12" strokeLinecap="round" fill="none" />
-        <g transform="translate(80 20)">
-          <circle cx="0" cy="0" r="15" fill="var(--surface)" stroke="var(--ink)" strokeWidth="4" />
-          <line x1="11" y1="11" x2="24" y2="24" stroke="var(--ink)" strokeWidth="5" strokeLinecap="round" />
-        </g>
-      </g>
-    </svg>
+    <img
+      src="/piggy-savings.webp"
+      alt="Guardando ahorros en una alcancía"
+      width={280}
+      height={200}
+    />
   );
 }
 
