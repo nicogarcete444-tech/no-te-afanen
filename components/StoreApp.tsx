@@ -452,6 +452,28 @@ export default function StoreApp({
     router.refresh();
   }
 
+  // Baja de cuenta real (no un mock): pega al endpoint que borra el usuario
+  // en Supabase con la service_role key. Todo lo que cuelga de user_id
+  // (carrito, ahorros, alertas, premium) se va solo por el "on delete
+  // cascade" del schema — acá solo hace falta cerrar la sesión local y
+  // refrescar para que la app vuelva a modo invitado.
+  async function handleDeleteAccount(): Promise<{ error?: string }> {
+    try {
+      const res = await fetch('/api/account/delete', { method: 'POST' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        return { error: data?.error || 'No pudimos eliminar la cuenta. Probá de nuevo en un momento.' };
+      }
+      const supabase = createClient();
+      await supabase.auth.signOut();
+      router.replace('/');
+      router.refresh();
+      return {};
+    } catch {
+      return { error: 'No pudimos conectar. Revisá tu conexión y probá de nuevo.' };
+    }
+  }
+
   // Toma el tema que el script de arranque ya dejó puesto (elección
   // guardada, o claro si nunca eligió). Ya no sigue al sistema operativo en
   // vivo: el default es claro y solo cambia si la persona lo elige a mano
@@ -1425,6 +1447,7 @@ export default function StoreApp({
           userEmail={userEmail}
           isAdmin={isAdmin}
           onLogout={handleLogout}
+          onDeleteAccount={handleDeleteAccount}
           onOpenSavingsHistory={() => {
             setCartOpen(false);
             setSavingsHistoryOpen(true);

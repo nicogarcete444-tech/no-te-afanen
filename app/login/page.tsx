@@ -1,9 +1,64 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type CSSProperties } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { getPasswordChecks, getPasswordStrength, meetsPasswordPolicy } from '@/lib/passwordStrength';
+
+// Ilustración de la pantalla de acceso: una persona comparando precios con
+// una lupa sobre una etiqueta de descuento. Elegida en vez de un ícono
+// genérico de "finanzas" (billete, alcancía) porque la app no es una
+// billetera: es un comparador de precios, y la lupa + etiqueta cuentan esa
+// historia sin necesitar texto.
+function AuthIllustration() {
+  return (
+    <svg viewBox="0 0 280 200" width="100%" height="100%" role="img" aria-hidden="true">
+      <ellipse cx="140" cy="176" rx="86" ry="10" fill="var(--line)" opacity="0.5" />
+
+      {/* etiqueta de descuento gigante, de fondo */}
+      <g transform="translate(150 46) rotate(8)">
+        <rect x="0" y="0" width="104" height="104" rx="18" fill="var(--accent-wash)" stroke="var(--accent-soft)" strokeWidth="2.5" />
+        <circle cx="24" cy="24" r="7" fill="var(--surface)" stroke="var(--accent-soft)" strokeWidth="2.5" />
+        <text x="52" y="66" textAnchor="middle" fontSize="34" fontWeight="800" fill="var(--accent)" fontFamily="var(--font-archivo), sans-serif">%</text>
+      </g>
+
+      {/* chispas decorativas */}
+      <circle cx="60" cy="40" r="5" fill="var(--gold)" opacity="0.55" />
+      <circle cx="245" cy="70" r="4" fill="var(--down)" opacity="0.5" />
+      <circle cx="228" cy="150" r="6" fill="var(--accent-soft)" opacity="0.4" />
+
+      {/* carrito chico, marca de la app, apoyado en el piso */}
+      <g transform="translate(30 148)">
+        <path d="M0 0h6l4.4 24a5 5 0 0 0 5 4.2h19a5 5 0 0 0 5-4h5.4" fill="none" stroke="var(--ink-faint)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+        <circle cx="15" cy="34" r="3.2" fill="var(--ink-faint)" />
+        <circle cx="30" cy="34" r="3.2" fill="var(--ink-faint)" />
+      </g>
+
+      {/* personaje */}
+      <g transform="translate(58 62)">
+        {/* piernas */}
+        <rect x="14" y="86" width="14" height="34" rx="6" fill="var(--ink)" />
+        <rect x="34" y="86" width="14" height="34" rx="6" fill="var(--ink)" />
+        {/* torso */}
+        <path d="M8 46a24 24 0 0 1 48 0v38a8 8 0 0 1-8 8H16a8 8 0 0 1-8-8Z" fill="var(--accent)" />
+        {/* brazo bajo */}
+        <rect x="46" y="52" width="12" height="30" rx="6" fill="var(--accent)" />
+        {/* cabeza */}
+        <circle cx="32" cy="20" r="20" fill="#F2C9A0" />
+        <path d="M12 18a20 20 0 0 1 40 0c-6-4-10-10-20-10s-14 6-20 10Z" fill="var(--ink)" />
+        <circle cx="25" cy="21" r="1.8" fill="var(--ink)" />
+        <circle cx="38" cy="21" r="1.8" fill="var(--ink)" />
+        <path d="M25 28q7 5 14 0" stroke="var(--ink)" strokeWidth="2" fill="none" strokeLinecap="round" />
+        {/* brazo con lupa, por encima de la cabeza y la etiqueta */}
+        <path d="M50 60c14-6 26-18 34-30" stroke="var(--accent)" strokeWidth="12" strokeLinecap="round" fill="none" />
+        <g transform="translate(80 20)">
+          <circle cx="0" cy="0" r="15" fill="var(--surface)" stroke="var(--ink)" strokeWidth="4" />
+          <line x1="11" y1="11" x2="24" y2="24" stroke="var(--ink)" strokeWidth="5" strokeLinecap="round" />
+        </g>
+      </g>
+    </svg>
+  );
+}
 
 export default function LoginPage() {
   const router = useRouter();
@@ -128,8 +183,23 @@ export default function LoginPage() {
           </svg>
           Volver
         </button>
-        <div className="auth-title">{mode === 'login' ? 'Entrá a tu cuenta' : 'Creá tu cuenta'}</div>
-        <div className="auth-sub">
+        <div className="auth-brand">
+          <span className="brand-icon">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3 4h2l1.6 9.6a2 2 0 0 0 2 1.7h7.6a2 2 0 0 0 2-1.6L20 8H6.2" />
+              <circle cx="9.5" cy="19" r="1.3" fill="var(--accent)" stroke="none" />
+              <circle cx="16.5" cy="19" r="1.3" fill="var(--accent)" stroke="none" />
+            </svg>
+          </span>
+          <span className="auth-brand-name">No Te Afanen</span>
+        </div>
+
+        <div className="auth-illustration-panel">
+          <AuthIllustration />
+        </div>
+
+        <div className="auth-title auth-title-center">{mode === 'login' ? 'Entrá a tu cuenta' : 'Creá tu cuenta'}</div>
+        <div className="auth-sub auth-sub-center">
           {mode === 'login'
             ? 'Tu carrito y tus comparaciones te esperan.'
             : 'Un minuto y tenés tu carrito guardado en cualquier celu.'}
@@ -138,15 +208,24 @@ export default function LoginPage() {
         <form onSubmit={handleSubmit}>
           <div className="auth-field">
             <label htmlFor="email">Email</label>
-            <input
-              id="email"
-              type="email"
-              autoComplete="email"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="vos@ejemplo.com"
-            />
+            <div className="auth-input-wrap">
+              <input
+                id="email"
+                type="email"
+                autoComplete="email"
+                autoFocus
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="vos@ejemplo.com"
+              />
+              <span className="auth-input-icon" aria-hidden="true">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="2.5" y="4.5" width="19" height="15" rx="3" />
+                  <path d="m3.5 6 8.5 6.5L20.5 6" />
+                </svg>
+              </span>
+            </div>
           </div>
           <div className="auth-field auth-field-password">
             <label htmlFor="password">Contraseña</label>
@@ -156,7 +235,7 @@ export default function LoginPage() {
                 que incluye el label — el 50% se calculaba sobre label+input
                 juntos, así que el ojo terminaba flotando en el borde entre
                 los dos, mordido por la esquina redondeada del input. */}
-            <div className="auth-password-wrap">
+            <div className="auth-password-wrap auth-input-wrap">
               <input
                 id="password"
                 type={showPassword ? 'text' : 'password'}
@@ -167,6 +246,12 @@ export default function LoginPage() {
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
               />
+              <span className="auth-input-icon" aria-hidden="true">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="4" y="10.5" width="16" height="10" rx="2.5" />
+                  <path d="M7.5 10.5V7a4.5 4.5 0 0 1 9 0v3.5" />
+                </svg>
+              </span>
               <button
                 type="button"
                 className="auth-password-toggle"
@@ -192,10 +277,21 @@ export default function LoginPage() {
           {mode === 'signup' && password.length > 0 && (
             <>
               <div className="pw-strength">
-                <span className="pw-strength-label">Seguridad de contraseña</span>
-                <span className="pw-strength-value" style={{ color: passwordStrength.colorVar }}>
-                  {passwordStrength.label}
-                </span>
+                <div className="pw-strength-bar">
+                  {[0, 1, 2, 3].map((i) => (
+                    <span
+                      key={i}
+                      className={`pw-strength-seg${i < passwordStrength.score ? ' filled' : ''}`}
+                      style={i < passwordStrength.score ? ({ '--seg-color': passwordStrength.colorVar } as CSSProperties) : undefined}
+                    />
+                  ))}
+                </div>
+                <div className="pw-strength-row">
+                  <span className="pw-strength-label">Seguridad de contraseña</span>
+                  <span className="pw-strength-value" style={{ color: passwordStrength.colorVar }}>
+                    {passwordStrength.label}
+                  </span>
+                </div>
               </div>
               <div className="pw-checklist">
                 <PwCheckItem met={passwordChecks.length} text="Mínimo de 8 caracteres" />
@@ -206,10 +302,29 @@ export default function LoginPage() {
             </>
           )}
 
-          {error && <div className="auth-error">{error}</div>}
+          {error && (
+            <div className="auth-error">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="9" />
+                <path d="M12 8v5M12 16h.01" />
+              </svg>
+              <span>{error}</span>
+            </div>
+          )}
 
-          <button type="submit" className="cta-btn" disabled={loading} style={{ width: '100%' }}>
-            {loading ? 'Un momento...' : mode === 'login' ? 'Entrar' : 'Crear cuenta'}
+          <button type="submit" className="cta-btn auth-submit" disabled={loading} style={{ width: '100%' }}>
+            {loading ? (
+              <span className="cta-btn-spinner">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round">
+                  <path d="M12 3a9 9 0 1 0 9 9" />
+                </svg>
+                Un momento...
+              </span>
+            ) : mode === 'login' ? (
+              'Entrar'
+            ) : (
+              'Crear cuenta'
+            )}
           </button>
         </form>
 

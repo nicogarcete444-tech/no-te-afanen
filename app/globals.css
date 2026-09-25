@@ -833,31 +833,84 @@
   .compare-locked-title{font-size:15px;font-weight:800;color:var(--ink);margin-bottom:8px;}
   .compare-locked-text{font-size:12.5px;color:var(--ink-soft);line-height:1.5;max-width:420px;margin:0 auto 16px;}
 
-/* --- auth --- */
+/* --- auth ---
+   Referencia: pantallas de login/alta de apps grandes (Ualá, Mercado Pago,
+   Revolut, Google) — tarjeta flotante con marca propia arriba, inputs
+   rellenos (sin borde blanco) con ícono a la izquierda, medidor de
+   contraseña como barra en vez de solo texto, botón con spinner real
+   durante la carga, y el error en una caja con ícono en vez de una línea
+   de texto rojo suelta. */
 .auth-wrap{
   min-height:100dvh;display:flex;align-items:center;justify-content:center;padding:24px;
+  background:
+    radial-gradient(560px 320px at 50% -8%, var(--accent-wash), transparent 70%),
+    var(--bg);
 }
-.auth-card{width:100%;max-width:360px;}
+.auth-card{
+  width:100%;max-width:376px;background:var(--surface);border:1px solid var(--line);
+  border-radius:var(--r-xl);padding:30px 26px;box-shadow:var(--shadow-md);
+}
 .auth-back{
   display:flex;align-items:center;gap:6px;background:none;border:none;cursor:pointer;
-  color:var(--ink-soft);font-size:13.5px;font-weight:600;padding:0;margin-bottom:22px;
+  color:var(--ink-soft);font-size:13.5px;font-weight:600;padding:0;margin-bottom:18px;
   font-family:var(--font-inter),sans-serif;transition:color .15s ease;
 }
 .auth-back:hover{color:var(--ink);}
 .auth-back svg{flex-shrink:0;}
-.auth-title{font-size:22px;margin-bottom:6px;}
-.auth-sub{font-size:13.5px;color:var(--ink-soft);margin-bottom:28px;}
+.auth-brand{display:flex;align-items:center;gap:10px;margin-bottom:18px;}
+.auth-brand .brand-icon{width:38px;height:38px;border-radius:12px;}
+.auth-brand-name{font-family:var(--font-archivo),sans-serif;font-weight:800;font-size:15px;letter-spacing:-0.03em;}
+
+/* panel de ilustración: caja redondeada con lavado de acento detrás del
+   dibujo, como en las apps de referencia (Ualá/Mercado Pago), sin llegar a
+   ser un fondo violeta sólido para no perder el sistema neutro del resto
+   de la app. */
+.auth-illustration-panel{
+  background:var(--accent-wash);border-radius:var(--r-lg);
+  padding:14px 10px 4px;margin-bottom:20px;height:168px;
+  display:flex;align-items:flex-end;justify-content:center;overflow:hidden;
+}
+.auth-illustration-panel svg{width:100%;height:100%;max-width:240px;}
+
+.auth-title{font-size:23px;margin-bottom:6px;}
+.auth-title-center{text-align:center;}
+.auth-sub{font-size:13.5px;color:var(--ink-soft);margin-bottom:26px;}
+.auth-sub-center{text-align:center;}
 .auth-field{margin-bottom:14px;}
 .auth-field label{display:block;font-size:12px;font-weight:600;color:var(--ink-soft);margin-bottom:6px;}
-.auth-field input{
-  width:100%;border:1px solid var(--line);border-radius:10px;padding:12px 14px;
-  font-size:14.5px;color:var(--ink);background:var(--surface);font-family:var(--font-inter),sans-serif;outline:none;
-  transition:border-color .15s ease;
+.auth-input-wrap{position:relative;}
+.auth-input-icon{
+  position:absolute;left:14px;top:50%;transform:translateY(-50%);
+  color:var(--ink-faint);display:flex;pointer-events:none;
 }
-.auth-field input:focus{border-color:var(--purple-2);}
-.auth-error{font-size:12.5px;color:var(--up);margin:-4px 0 14px;}
-.auth-switch{font-size:13px;color:var(--ink-soft);margin-top:18px;text-align:center;}
+.auth-field input{
+  width:100%;border:1.5px solid transparent;border-radius:12px;padding:13px 14px 13px 42px;
+  font-size:14.5px;color:var(--ink);background:var(--surface-2);font-family:var(--font-inter),sans-serif;outline:none;
+  transition:border-color .15s ease, background .15s ease;
+}
+.auth-field input:focus{border-color:var(--purple-2);background:var(--surface);}
+.auth-field input:focus + .auth-input-icon,
+.auth-input-wrap:focus-within .auth-input-icon{color:var(--purple-2);}
+.auth-error{
+  display:flex;align-items:flex-start;gap:8px;font-size:12.5px;line-height:1.45;color:var(--up);
+  background:color-mix(in srgb, var(--up) 9%, var(--surface));border-radius:10px;padding:10px 12px;margin:2px 0 14px;
+}
+.auth-error svg{flex-shrink:0;margin-top:1px;}
+.auth-switch{font-size:13px;color:var(--ink-soft);margin-top:20px;text-align:center;}
 .auth-switch button{background:none;border:none;color:var(--purple-2);font-weight:700;cursor:pointer;padding:0;font-size:13px;}
+
+/* botón principal en violeta sólo en el login/registro: es la única
+   pantalla de la app donde el acento se usa así de fuerte, a tono con la
+   ilustración de arriba. El resto de la app sigue con el CTA negro. */
+.auth-submit{background:var(--accent);color:#fff;}
+.auth-submit:hover{opacity:.9;}
+
+/* spinner del botón principal mientras carga */
+.cta-btn-spinner{
+  display:inline-flex;align-items:center;justify-content:center;gap:8px;
+}
+.cta-btn-spinner svg{animation:auth-spin .7s linear infinite;flex-shrink:0;}
+@keyframes auth-spin{to{transform:rotate(360deg);}}
 
 /* --- pantalla "revisá tu mail" tras registrarte --- */
 .auth-check-email{
@@ -886,8 +939,14 @@
 }
 .auth-password-toggle:hover{background:var(--chip-bg);color:var(--ink);}
 
-/* medidor + checklist de seguridad de contraseña */
-.pw-strength{display:flex;justify-content:space-between;align-items:center;margin:8px 0 12px;}
+/* medidor + checklist de seguridad de contraseña.
+   La barra de segmentos (estilo Google/Dropbox) reemplaza al texto solo:
+   se lee de un vistazo sin tener que parar a leer la palabra. */
+.pw-strength{margin:10px 0 12px;}
+.pw-strength-bar{display:flex;gap:4px;margin-bottom:6px;}
+.pw-strength-seg{height:4px;flex:1;border-radius:2px;background:var(--line);transition:background .2s ease;}
+.pw-strength-seg.filled{background:var(--seg-color, var(--ink-faint));}
+.pw-strength-row{display:flex;justify-content:space-between;align-items:center;}
 .pw-strength-label{font-size:12px;color:var(--ink-soft);}
 .pw-strength-value{font-size:12.5px;font-weight:700;}
 .pw-checklist{display:flex;flex-direction:column;gap:8px;margin-bottom:18px;}
@@ -938,12 +997,46 @@
   background:var(--ink);color:var(--bg);
   font-family:var(--font-archivo),sans-serif;font-weight:800;font-size:16px;
 }
+.account-avatar-lg{width:52px;height:52px;font-size:20px;}
 .account-head-text{min-width:0;}
 .account-head-title{
   font-size:13.5px;font-weight:700;color:var(--ink);
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
 }
 .account-head-sub{font-size:11.5px;color:var(--ink-soft);margin-top:2px;}
+
+/* el encabezado (avatar + mail) ahora es tocable: entra a "Tu perfil".
+   Mismo look que .account-head pero como <button>, con flecha a la
+   derecha para que se note que abre algo. */
+.account-head-button{
+  width:100%;background:none;border:none;cursor:pointer;text-align:left;
+  border-radius:var(--r-sm);transition:background .12s ease;
+}
+.account-head-button:hover{background:var(--surface-2);}
+.account-head-button .account-row-chevron{flex-shrink:0;}
+.account-head-static{border-bottom:none;padding-bottom:4px;}
+
+/* --- "Tu perfil": sub-pantalla dentro del mismo panel --- */
+.account-profile-topbar{
+  display:flex;align-items:center;gap:6px;padding:4px 4px 10px;
+}
+.account-profile-back{
+  width:30px;height:30px;border-radius:8px;border:none;background:none;color:var(--ink-soft);
+  display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;
+  transition:background .12s ease,color .12s ease;
+}
+.account-profile-back:hover{background:var(--surface-2);color:var(--ink);}
+.account-profile-topbar-title{font-size:14px;font-weight:800;font-family:var(--font-archivo),sans-serif;color:var(--ink);}
+
+.account-delete-confirm{
+  margin:6px 4px 4px;padding:12px;border-radius:var(--r-sm);background:color-mix(in srgb, var(--up) 8%, var(--surface));
+}
+.account-delete-confirm p{margin:0 0 10px;font-size:12.5px;line-height:1.5;color:var(--ink-soft);}
+.account-delete-error{color:var(--up) !important;font-weight:600;}
+.account-delete-actions{display:flex;gap:8px;}
+.account-delete-actions .cta-btn{margin-top:0;padding:11px;font-size:13px;}
+.account-delete-confirm-btn{background:var(--up);color:#fff;}
+.account-delete-confirm-btn:hover{opacity:.88;}
 
 .account-rows{display:flex;flex-direction:column;gap:2px;}
 .account-row{
