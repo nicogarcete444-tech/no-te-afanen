@@ -1016,23 +1016,17 @@
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
 }
 .account-head-sub{
-  display:flex;align-items:center;gap:8px;margin-top:4px;
+  display:flex;align-items:center;gap:5px;
+  font-size:11.5px;margin-top:2px;
 }
 
-/* "Free" / "Premium" como chip, no como texto suelto: se lee más rápido
-   y separa mejor el dato (el plan) de la acción (Ver perfil). */
-.account-plan-pill{
-  display:inline-flex;align-items:center;flex-shrink:0;
-  font-size:10.5px;font-weight:800;letter-spacing:.02em;text-transform:uppercase;
-  padding:2.5px 8px;border-radius:999px;
-  background:var(--surface);color:var(--ink-soft);
-  box-shadow:inset 0 0 0 1px var(--line);
-}
-.account-plan-pill.is-premium{
-  background:color-mix(in srgb, var(--gold) 16%, var(--surface));
-  color:var(--gold);box-shadow:none;
-}
-.account-head-cta{font-size:12px;font-weight:700;color:var(--accent);}
+/* "Free" / "Ver perfil" como texto en una sola línea, cada uno con su
+   color — sin caja ni borde propios (una cajita al lado de texto plano
+   quedaba como dos elementos que no combinan entre sí). */
+.account-plan-label{font-weight:700;color:var(--ink-soft);}
+.account-plan-label.is-premium{color:var(--gold);}
+.account-head-sub-dot{color:var(--ink-faint);}
+.account-head-cta{font-weight:700;color:var(--accent);}
 
 /* el encabezado (avatar + mail) ahora es tocable: entra a "Tu perfil".
    Se separa del resto de la lista como una tarjeta propia (fondo + borde
