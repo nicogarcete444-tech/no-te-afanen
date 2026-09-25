@@ -78,7 +78,13 @@ const VTEX_STORES_2 = [
 // apaga las consultas a tiendas VTEX y MercadoLibre sin tocar código.
 const STORE_LOOKUP_ENABLED = process.env.IMAGE_STORE_LOOKUP !== '0';
 
-const MAX_EANS = 20;
+// MAX_EANS tiene que ser >= el MAX_PER_REQUEST con el que el navegador arma
+// cada pedido (ver lib/productImage.ts): si el navegador junta 60 códigos en
+// un solo pedido y acá se cortaba en 20, los 40 restantes ni se llegaban a
+// consultar y quedaban sin foto directamente (no es que ninguna fuente la
+// tuviera: nunca se les preguntó). El tope real de trabajo por pedido lo
+// ponen TOTAL_BUDGET_MS y MAX_CONCURRENT_CALLS más abajo, no este número.
+const MAX_EANS = 60;
 const CACHE_SECONDS = 60 * 60 * 24 * 30; // foto encontrada: un mes
 const MISS_CACHE_SECONDS = 60 * 60 * 24; // "ninguna fuente la tiene": un día
 const PENDING_CACHE_SECONDS = 60; // alguna fuente falló: que se reintente pronto
@@ -88,8 +94,17 @@ const PROVIDER_REVALIDATE = 60 * 60 * 24 * 3;
 // Tiempo máximo total del pedido (la función corta a los 25s).
 const TOTAL_BUDGET_MS = 20_000;
 const PER_CALL_TIMEOUT_MS = 4_000;
+// Cuántas conexiones salientes van a la vez (así no se golpea a una fuente
+// con cientos de pedidos simultáneos). Esto, junto con TOTAL_BUDGET_MS y el
+// timeout por llamada, es lo que de verdad acota cuánto puede tardar y
+// cuánto trabajo hace un pedido — no hace falta además un tope de "cantidad
+// total de llamadas": ese tope existió (MAX_PROBES_PER_REQUEST = 30) y era
+// el motivo real por el que, con más de 7-8 productos en un mismo pedido, la
+// mayoría se quedaba sin ni siquiera consultar ninguna fuente (se marcaban
+// como fallidos apenas se pedían, antes de mandar el fetch). budget(deadline)
+// ya se encarga de cortar en seco (sin red) apenas queda poco tiempo, así que
+// el presupuesto de tiempo es la única traba que hace falta.
 const MAX_CONCURRENT_CALLS = 12;
-const MAX_PROBES_PER_REQUEST = 30;
 
 // Open Food Facts pide identificarse. Sin esto, los pedidos anónimos entran
 // en la cola lenta o directamente se rechazan.
@@ -395,26 +410,26 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Falta el parámetro "eans".' }, { status: 400 });
   }
 
-  // El límite se mide en productos, no en requests: un pedido con 20 EAN
-  // dispara hasta MAX_PROBES_PER_REQUEST llamadas a terceros, así que pesa 20
-  // veces más que uno con 1. Si falla el limitador compartido se deja pasar
-  // (es una lectura cacheable), pero el contador local sigue vigente.
+  // El límite se mide en productos, no en requests: un pedido con MAX_EANS
+  // códigos dispara hasta MAX_PROBES_PER_REQUEST llamadas a terceros, así que
+  // pesa muchas veces más que uno con 1. Si falla el limitador compartido se
+  // deja pasar (es una lectura cacheable), pero el contador local sigue
+  // vigente.
   if (await isRateLimited(request, 'imagenes', RATE_LIMITS.imagenes, { cost: eans.length, failMode: 'open' })) {
     return NextResponse.json({ error: 'Demasiados pedidos. Esperá un momento.' }, { status: 429 });
   }
 
   const deadline = Date.now() + TOTAL_BUDGET_MS;
   const limit = createLimiter(MAX_CONCURRENT_CALLS);
-  let probes = 0;
-  const budgetedLimit = <T>(fn: () => Promise<T>) => {
-    if (probes >= MAX_PROBES_PER_REQUEST) return Promise.resolve(ERROR as unknown as T);
-    probes++;
-    return limit(fn);
-  };
 
   // Los productos van en paralelo entre sí; cada uno recorre sus niveles en
-  // orden.
-  const results = await Promise.all(eans.map((ean) => resolveOne(ean, nameByEan.get(ean), deadline, budgetedLimit)));
+  // orden. limit() ya acota cuántas conexiones salientes hay a la vez, y
+  // budget(deadline) corta en seco (sin mandar el pedido) apenas queda poco
+  // tiempo del presupuesto total: entre las dos cosas alcanza para no
+  // pasarse ni de tiempo ni de conexiones simultáneas, sin necesitar además
+  // un tope artificial de "cantidad total de llamadas" que cortaba productos
+  // de forma pareja.
+  const results = await Promise.all(eans.map((ean) => resolveOne(ean, nameByEan.get(ean), deadline, limit)));
 
   // imagenes[ean] es un array de URLs ordenadas por prioridad (puede tener
   // más de una: ver el comentario de allHits/resolveOne). Array vacío =
