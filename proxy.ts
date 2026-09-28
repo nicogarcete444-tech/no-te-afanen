@@ -138,11 +138,15 @@ export const config = {
     // corre en todo menos assets estáticos, archivos de Next y los archivos de
     // la PWA.
     //
+    // El archivo google<hash>.html de verificación de Search Console también
+    // queda afuera por el mismo motivo que robots.txt: es para el crawler de
+    // Google, no tiene sesión y tiene que salir limpio, sin Set-Cookie.
+    //
     // robots.txt y sitemap.xml también quedan afuera: son archivos para
     // crawlers, que no tienen sesión. Si el middleware corriera ahí haría una
     // llamada a Supabase al vacío por cada pedido de un bot y podría
     // devolverlos con Set-Cookie, lo que le dice al CDN que la respuesta es
     // privada y arruina el caché de dos archivos que son iguales para todos.
-    '/((?!_next/static|_next/image|favicon.ico|manifest.json|sw.js|robots.txt|sitemap.xml|icons/|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    '/((?!_next/static|_next/image|favicon.ico|manifest.json|sw.js|robots.txt|sitemap.xml|google[a-z0-9]+\\.html|icons/|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 };
