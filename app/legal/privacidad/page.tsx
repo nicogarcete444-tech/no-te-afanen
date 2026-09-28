@@ -94,8 +94,9 @@ export default function PrivacidadPage() {
 
         <SubTitle>2.5. Lo que no recopilamos</SubTitle>
         <p>
-          Hoy la app no usa cookies de publicidad ni de análisis de terceros (por ejemplo,
-          Google Analytics o Meta Pixel), no guarda tu ubicación exacta de forma
+          La app usa Google Analytics para medir de forma agregada cómo se usa (páginas
+          vistas, dispositivo, país). Esto instala cookies de análisis de Google. No usa
+          cookies de publicidad ni Meta Pixel, no guarda tu ubicación exacta de forma
           permanente, y no procesa ni almacena datos de tarjetas o medios de pago (no
           hay ningún cobro automático dentro de la app).
         </p>

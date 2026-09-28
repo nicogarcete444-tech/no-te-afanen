@@ -49,15 +49,15 @@ type CookieToSet = { name: string; value: string; options: CookieOptions };
 function buildCsp(nonce: string): string {
   return [
     "default-src 'self'",
-    `script-src 'self' 'nonce-${nonce}' 'wasm-unsafe-eval'`,
+    `script-src 'self' 'nonce-${nonce}' 'wasm-unsafe-eval' https://www.googletagmanager.com`,
     "worker-src 'self' blob:",
     // style-src sí conserva 'unsafe-inline': React escribe estilos inline
     // (style={{...}}) por todos lados y Next inyecta su CSS crítico igual.
     // El riesgo de un estilo inyectado es muchísimo menor que el de un
     // script: no ejecuta código.
     "style-src 'self' 'unsafe-inline'",
-    "img-src 'self' data: blob: https://*.openfoodfacts.org https://*.openbeautyfacts.org https://*.openproductsfacts.org https://*.openpetfoodfacts.org https://*.vtexassets.com https://*.vteximg.com.br https://*.mlstatic.com",
-    "connect-src 'self' https://*.supabase.co https://world.openfoodfacts.org https://world.openbeautyfacts.org https://world.openproductsfacts.org",
+    "img-src 'self' data: blob: https://*.openfoodfacts.org https://*.openbeautyfacts.org https://*.openproductsfacts.org https://*.openpetfoodfacts.org https://*.vtexassets.com https://*.vteximg.com.br https://*.mlstatic.com https://*.google-analytics.com https://*.googletagmanager.com",
+    "connect-src 'self' https://*.supabase.co https://world.openfoodfacts.org https://world.openbeautyfacts.org https://world.openproductsfacts.org https://*.google-analytics.com https://*.analytics.google.com https://*.googletagmanager.com",
     "font-src 'self' data:",
     "frame-src 'none'",
     "object-src 'none'",

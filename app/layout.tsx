@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import { headers } from 'next/headers';
+import { GoogleAnalytics } from '@next/third-parties/google';
 import { Archivo, Inter } from 'next/font/google';
 import './globals.css';
 import ServiceWorkerRegister from '@/components/ServiceWorkerRegister';
@@ -98,6 +99,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   // son páginas livianas sin datos que calcular.
   const nonce = (await headers()).get('x-nonce') ?? undefined;
 
+  // ID de medición de GA4 (G-XXXXXXXXXX). Sin la env var no se carga nada.
+  const gaId = process.env.NEXT_PUBLIC_GA_ID;
+
   return (
     <html lang="es-AR" className={`${archivo.variable} ${inter.variable}`} suppressHydrationWarning>
       <head>
@@ -106,6 +110,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       <body>
         {children}
         <ServiceWorkerRegister />
+        {gaId ? <GoogleAnalytics gaId={gaId} nonce={nonce} /> : null}
       </body>
     </html>
   );
