@@ -4,6 +4,7 @@ import { GoogleAnalytics } from '@next/third-parties/google';
 import { Archivo, Inter } from 'next/font/google';
 import './globals.css';
 import ServiceWorkerRegister from '@/components/ServiceWorkerRegister';
+import InstallBanner from '@/components/InstallBanner';
 import { SITE_URL } from '@/lib/siteUrl';
 import { THEME_BG, THEME_BOOT_SCRIPT } from '@/lib/theme';
 
@@ -108,6 +109,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <script nonce={nonce} dangerouslySetInnerHTML={{ __html: THEME_BOOT_SCRIPT }} />
       </head>
       <body>
+        <InstallBanner />
         {children}
         <ServiceWorkerRegister />
         {gaId ? <GoogleAnalytics gaId={gaId} nonce={nonce} /> : null}
